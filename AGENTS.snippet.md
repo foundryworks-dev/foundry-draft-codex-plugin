@@ -1,0 +1,23 @@
+# Foundry/Draft — AGENTS.md snippet (optional)
+
+Codex has no session-start hook, so there's no exact equivalent of
+the Claude Code plugin's "Draft is connected" notice. The closest
+thing is your **global** `~/.codex/AGENTS.md`, which Codex reads at
+the start of every session.
+
+If you'd like Codex to be aware of the Draft commands, append the
+block below to `~/.codex/AGENTS.md`. It's **opt-in** — and note it's
+unconditional: unlike the Claude Code hook (which only fired when
+`DRAFT_API_KEY` was set), this text is in scope for every session in
+every repo. Keep it short for that reason, or skip it and just invoke
+`/prompts:draft-work` explicitly when you want it.
+
+```markdown
+## Foundry/Draft
+
+If `DRAFT_API_KEY` is set in the environment, this machine is wired to
+a Foundry/Draft workspace. To see the agent work queue, run
+`/prompts:draft-queue`. To start working tickets from it, run
+`/prompts:draft-work`. Do not start working tickets unprompted — wait
+to be asked.
+```
