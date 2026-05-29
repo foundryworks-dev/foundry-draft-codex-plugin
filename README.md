@@ -24,6 +24,18 @@ The MCP server is byte-for-byte the same one the Claude Code plugin
 ships — MCP is a standard protocol, so it's portable. (For now it's
 copied into this repo; it may be extracted to a shared package later.)
 
+> **Token-tracking note.** The MCP server's `claim_story` and
+> `transition_story` tools auto-PATCH a story's `agent_tokens_used`
+> field on the finish transition by reading the agent session's
+> transcript file. Today that reader only knows the Claude Code
+> transcript path (`~/.claude/projects/…`), so in a Codex session
+> the bookkeeping gracefully short-circuits and leaves the field
+> null. When the Codex CLI exposes its own session-token totals in
+> a stable on-disk location, the same code path picks it up — only
+> the transcript locator needs swapping. Until then, Codex users
+> can still PATCH `agent_tokens_used` themselves via `update_story`
+> if they have a count to record.
+
 ## Install
 
 ```bash

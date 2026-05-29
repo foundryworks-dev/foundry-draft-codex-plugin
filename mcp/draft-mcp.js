@@ -16,6 +16,10 @@
 // discoverable.
 "use strict";
 
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
 const API_URL = (
   process.env.DRAFT_API_URL || "https://draft.foundryworks.dev"
 ).replace(/\/+$/, "");
@@ -25,6 +29,193 @@ const SERVER_INFO = { name: "draft", version: "0.1.0" };
 // Echoed back to the client when it doesn't send its own preferred
 // protocol version in `initialize`.
 const DEFAULT_PROTOCOL = "2025-06-18";
+
+// ---------------------------------------------------- token tracking (#135)
+//
+// Auto-record how many LLM tokens the agent spent on each story by
+// snapshotting the cumulative-token count at claim time and PATCHing
+// the diff to `agent_tokens_used` on the finish transition. The
+// snapshot lives in a small per-session JSON file under
+// ~/.claude/foundry-draft-plugin/ so the bookkeeping survives
+// multiple tool calls within a session and stays isolated when
+// several Claude Code sessions run in parallel.
+//
+// Robust to running outside Claude Code: if there's no transcript
+// to read, every step short-circuits to a no-op (no snapshot, no
+// PATCH at finish), and the rest of the plugin keeps working.
+//
+// Restart caveat (accepted in the story discussion): if the agent
+// process is killed mid-story and a fresh session resumes, the
+// snapshot file is keyed by the OLD session id; the new session
+// can't see it. We re-snapshot on the spot at finish and just
+// report what the current session contributed. Under-reports
+// rather than mis-reports.
+
+const STATE_DIR = path.join(
+  os.homedir(),
+  ".claude",
+  "foundry-draft-plugin",
+);
+
+// Transcript files live at:
+//   ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
+// where <encoded-cwd> is the absolute working directory with every
+// "/" replaced by "-". Claude Code writes one assistant-message row
+// per line, with a `message.usage` object on each one.
+function transcriptDirForCwd(cwd) {
+  return path.join(
+    os.homedir(),
+    ".claude",
+    "projects",
+    cwd.replace(/\//g, "-"),
+  );
+}
+
+// Pick the most-recently-modified .jsonl in the transcript dir.
+// That's the session currently being written to — which, when we're
+// running as an MCP subprocess, is the session that just invoked us.
+// Returns null when there's nothing to read (e.g. running outside
+// Claude Code).
+function currentSession() {
+  let entries;
+  try {
+    entries = fs.readdirSync(transcriptDirForCwd(process.cwd()));
+  } catch {
+    return null;
+  }
+  let best = null;
+  let bestMtime = -1;
+  for (const name of entries) {
+    if (!name.endsWith(".jsonl")) continue;
+    const full = path.join(transcriptDirForCwd(process.cwd()), name);
+    let stat;
+    try {
+      stat = fs.statSync(full);
+    } catch {
+      continue;
+    }
+    if (stat.mtimeMs > bestMtime) {
+      bestMtime = stat.mtimeMs;
+      best = { sessionId: name.slice(0, -".jsonl".length), path: full };
+    }
+  }
+  return best;
+}
+
+// Sum input + output + cache_read + cache_creation across every row
+// in the transcript that carries a usage object. Including
+// cache_read makes the number monotonically match the "size of work"
+// figure billing would show, even though cache_read is functionally
+// free per call.
+//
+// Tolerant of partial / in-flight writes: a malformed trailing line
+// is skipped silently. Returns null when the file can't be read at
+// all.
+function readTotalTokens(transcriptPath) {
+  let data;
+  try {
+    data = fs.readFileSync(transcriptPath, "utf8");
+  } catch {
+    return null;
+  }
+  let total = 0;
+  for (const line of data.split("\n")) {
+    if (!line.trim()) continue;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const u = row && row.message && row.message.usage;
+    if (!u) continue;
+    total +=
+      (u.input_tokens || 0) +
+      (u.output_tokens || 0) +
+      (u.cache_read_input_tokens || 0) +
+      (u.cache_creation_input_tokens || 0);
+  }
+  return total;
+}
+
+function snapshotFileFor(sessionId) {
+  return path.join(STATE_DIR, `${sessionId}.json`);
+}
+
+function loadSnapshots(sessionId) {
+  try {
+    return JSON.parse(fs.readFileSync(snapshotFileFor(sessionId), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function saveSnapshots(sessionId, snapshots) {
+  try {
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    fs.writeFileSync(
+      snapshotFileFor(sessionId),
+      JSON.stringify(snapshots, null, 2),
+    );
+  } catch (e) {
+    process.stderr.write(
+      "draft-mcp: token snapshot save failed: " +
+        ((e && e.message) || e) +
+        "\n",
+    );
+  }
+}
+
+function snapshotKey(projectId, number) {
+  return `${projectId}:${number}`;
+}
+
+// Record the current cumulative token total as the baseline for a
+// story. Called on claim_story and on restart (per the story spec —
+// restart is "treat like a fresh claim"). Silently no-ops outside a
+// Claude Code session.
+function snapshotClaim(projectId, number) {
+  const session = currentSession();
+  if (!session) return;
+  const total = readTotalTokens(session.path);
+  if (total == null) return;
+  const snapshots = loadSnapshots(session.sessionId);
+  snapshots[snapshotKey(projectId, number)] = {
+    snapshot: total,
+    claimed_at: new Date().toISOString(),
+  };
+  saveSnapshots(session.sessionId, snapshots);
+}
+
+// Compute spend since claim and PATCH agent_tokens_used. Drops the
+// snapshot on success — only one finish per claim is meaningful.
+// Best-effort: if any step fails we log and continue so the actual
+// finish transition still happens (recording cost matters less than
+// completing the work).
+async function patchTokensUsedAtFinish(projectId, number) {
+  const session = currentSession();
+  if (!session) return;
+  const snapshots = loadSnapshots(session.sessionId);
+  const entry = snapshots[snapshotKey(projectId, number)];
+  if (!entry) return; // story wasn't claimed through this session
+  const total = readTotalTokens(session.path);
+  if (total == null) return;
+  const used = Math.max(0, total - entry.snapshot);
+  try {
+    await api("PATCH", `/v1/projects/${projectId}/stories/${number}`, {
+      agent_tokens_used: used,
+    });
+  } catch (e) {
+    process.stderr.write(
+      "draft-mcp: agent_tokens_used PATCH failed: " +
+        ((e && e.message) || e) +
+        "\n",
+    );
+    return; // leave the snapshot in place so a retry could still work
+  }
+  delete snapshots[snapshotKey(projectId, number)];
+  saveSnapshots(session.sessionId, snapshots);
+}
 
 // ---------------------------------------------------------------- HTTP
 
@@ -153,9 +344,17 @@ const TOOLS = [
       if (!userId) {
         throw new Error("could not resolve own user id from /v1/auth/me");
       }
-      return api("PATCH", `/v1/projects/${a.project_id}/stories/${a.number}`, {
-        owner_id: userId,
-      });
+      const result = await api(
+        "PATCH",
+        `/v1/projects/${a.project_id}/stories/${a.number}`,
+        { owner_id: userId },
+      );
+      // #135 — start the token-usage clock for this story. Best-
+      // effort: a failed snapshot just means we'll skip the
+      // agent_tokens_used PATCH at finish; the claim itself is
+      // already done.
+      snapshotClaim(a.project_id, a.number);
+      return result;
     },
   },
   {
@@ -174,12 +373,27 @@ const TOOLS = [
       },
       required: ["project_id", "number", "action"],
     },
-    run: (a) =>
-      api(
+    run: async (a) => {
+      // #135 — auto-report agent_tokens_used on finish, and re-seed
+      // the snapshot on restart so the next finish reports only the
+      // post-restart spend. block / unblock / deliver / reject leave
+      // the snapshot alone; the snapshot persists across them so a
+      // story that finishes after a block-then-unblock cycle still
+      // captures total spend since the original claim. The PATCH
+      // here runs BEFORE the transition POST so it shows up on the
+      // story's activity timeline as part of the work that finished
+      // the story, not as a stray edit after delivery.
+      if (a.action === "finish") {
+        await patchTokensUsedAtFinish(a.project_id, a.number);
+      } else if (a.action === "restart") {
+        snapshotClaim(a.project_id, a.number);
+      }
+      return api(
         "POST",
         `/v1/projects/${a.project_id}/stories/${a.number}/transitions`,
         { action: a.action },
-      ),
+      );
+    },
   },
   {
     name: "comment",
