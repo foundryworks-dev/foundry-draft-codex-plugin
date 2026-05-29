@@ -102,23 +102,29 @@ function currentSession() {
   return best;
 }
 
-// Sum input + output + cache_read + cache_creation across every row
-// in the transcript that carries a usage object. Including
-// cache_read makes the number monotonically match the "size of work"
+// Sum each token category across every row in the transcript that
+// carries a usage object. Returns a snapshot of cumulative session
+// spend split by type, plus the aggregate. Including cache_read
+// keeps the aggregate monotonically matching the "size of work"
 // figure billing would show, even though cache_read is functionally
 // free per call.
 //
 // Tolerant of partial / in-flight writes: a malformed trailing line
 // is skipped silently. Returns null when the file can't be read at
 // all.
-function readTotalTokens(transcriptPath) {
+function readTokenSnapshot(transcriptPath) {
   let data;
   try {
     data = fs.readFileSync(transcriptPath, "utf8");
   } catch {
     return null;
   }
-  let total = 0;
+  const snap = {
+    input: 0,
+    output: 0,
+    cache_read: 0,
+    cache_creation: 0,
+  };
   for (const line of data.split("\n")) {
     if (!line.trim()) continue;
     let row;
@@ -129,13 +135,14 @@ function readTotalTokens(transcriptPath) {
     }
     const u = row && row.message && row.message.usage;
     if (!u) continue;
-    total +=
-      (u.input_tokens || 0) +
-      (u.output_tokens || 0) +
-      (u.cache_read_input_tokens || 0) +
-      (u.cache_creation_input_tokens || 0);
+    snap.input += u.input_tokens || 0;
+    snap.output += u.output_tokens || 0;
+    snap.cache_read += u.cache_read_input_tokens || 0;
+    snap.cache_creation += u.cache_creation_input_tokens || 0;
   }
-  return total;
+  snap.total =
+    snap.input + snap.output + snap.cache_read + snap.cache_creation;
+  return snap;
 }
 
 function snapshotFileFor(sessionId) {
@@ -170,41 +177,74 @@ function snapshotKey(projectId, number) {
   return `${projectId}:${number}`;
 }
 
-// Record the current cumulative token total as the baseline for a
-// story. Called on claim_story and on restart (per the story spec —
-// restart is "treat like a fresh claim"). Silently no-ops outside a
-// Claude Code session.
+// Record the current cumulative session token totals as the baseline
+// for a story. Called on claim_story and on restart (per the story
+// spec — restart is "treat like a fresh claim"). Stores both the
+// aggregate and each typed category (#155) so the finish PATCH can
+// report the breakdown the project's Token Usage screen (#154)
+// renders. Silently no-ops outside a Claude Code session.
 function snapshotClaim(projectId, number) {
   const session = currentSession();
   if (!session) return;
-  const total = readTotalTokens(session.path);
-  if (total == null) return;
+  const snap = readTokenSnapshot(session.path);
+  if (snap == null) return;
   const snapshots = loadSnapshots(session.sessionId);
   snapshots[snapshotKey(projectId, number)] = {
-    snapshot: total,
+    // Legacy "snapshot" key kept in sync with snap.total so a roll-back
+    // to a pre-#155 plugin can still finish a claim that this version
+    // started.
+    snapshot: snap.total,
+    snapshot_typed: {
+      input: snap.input,
+      output: snap.output,
+      cache_read: snap.cache_read,
+      cache_creation: snap.cache_creation,
+    },
     claimed_at: new Date().toISOString(),
   };
   saveSnapshots(session.sessionId, snapshots);
 }
 
-// Compute spend since claim and PATCH agent_tokens_used. Drops the
-// snapshot on success — only one finish per claim is meaningful.
-// Best-effort: if any step fails we log and continue so the actual
-// finish transition still happens (recording cost matters less than
-// completing the work).
+// Compute per-category spend since claim and PATCH the aggregate plus
+// the typed columns (#138, #155). Drops the snapshot on success —
+// only one finish per claim is meaningful. Best-effort: if the PATCH
+// fails we log and continue so the actual finish transition still
+// happens (recording cost matters less than completing the work).
+//
+// Backward-compat: a snapshot taken by an older plugin only carries
+// the aggregate baseline (`snapshot` key, no `snapshot_typed`). Those
+// fall back to the pre-#155 single-field PATCH.
 async function patchTokensUsedAtFinish(projectId, number) {
   const session = currentSession();
   if (!session) return;
   const snapshots = loadSnapshots(session.sessionId);
   const entry = snapshots[snapshotKey(projectId, number)];
   if (!entry) return; // story wasn't claimed through this session
-  const total = readTotalTokens(session.path);
-  if (total == null) return;
-  const used = Math.max(0, total - entry.snapshot);
+  const snap = readTokenSnapshot(session.path);
+  if (snap == null) return;
+
+  // Build the patch body. Always send the aggregate. Send each typed
+  // field only when both the baseline AND the current snapshot have a
+  // value for it — gives us a graceful fallback if anything's missing.
+  const body = {
+    agent_tokens_used: Math.max(0, snap.total - (entry.snapshot || 0)),
+  };
+  const typedBase = entry.snapshot_typed;
+  if (typedBase) {
+    body.agent_input_tokens = Math.max(0, snap.input - (typedBase.input || 0));
+    body.agent_output_tokens = Math.max(0, snap.output - (typedBase.output || 0));
+    body.agent_cache_read_tokens = Math.max(
+      0,
+      snap.cache_read - (typedBase.cache_read || 0),
+    );
+    body.agent_cache_creation_tokens = Math.max(
+      0,
+      snap.cache_creation - (typedBase.cache_creation || 0),
+    );
+  }
+
   try {
-    await api("PATCH", `/v1/projects/${projectId}/stories/${number}`, {
-      agent_tokens_used: used,
-    });
+    await api("PATCH", `/v1/projects/${projectId}/stories/${number}`, body);
   } catch (e) {
     process.stderr.write(
       "draft-mcp: agent_tokens_used PATCH failed: " +
