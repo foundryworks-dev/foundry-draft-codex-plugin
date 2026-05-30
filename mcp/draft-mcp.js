@@ -25,7 +25,7 @@ const API_URL = (
 ).replace(/\/+$/, "");
 const API_KEY = process.env.DRAFT_API_KEY || "";
 
-const SERVER_INFO = { name: "draft", version: "0.1.0" };
+const SERVER_INFO = { name: "draft", version: "0.4.0" };
 // Echoed back to the client when it doesn't send its own preferred
 // protocol version in `initialize`.
 const DEFAULT_PROTOCOL = "2025-06-18";
