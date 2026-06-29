@@ -71,12 +71,65 @@ function transcriptDirForCwd(cwd) {
   );
 }
 
-// Pick the most-recently-modified .jsonl in the transcript dir.
-// That's the session currently being written to — which, when we're
-// running as an MCP subprocess, is the session that just invoked us.
-// Returns null when there's nothing to read (e.g. running outside
-// Claude Code).
+// Identify the transcript for the session that invoked us. Claude Code
+// sets CLAUDE_CODE_SESSION_ID in the MCP subprocess's environment and
+// writes that session's transcript to <session-id>.jsonl, so we resolve
+// that exact file. The old approach — "the most-recently-modified
+// .jsonl in the cwd-derived dir" — mis-fires whenever a stale or
+// concurrent transcript is newer than the active one (or the active
+// transcript lives under a dir that doesn't match process.cwd()): claim
+// and finish then read the same wrong file, the diff is ~0, and the
+// story records 0 tokens (#248). We only fall back to that heuristic
+// when the env var is absent (older Claude Code / non-Claude hosts).
+// Returns null when nothing resolves (e.g. running outside Claude Code).
 function currentSession() {
+  const sessionId = process.env.CLAUDE_CODE_SESSION_ID;
+  if (sessionId) {
+    // Prefer the transcript under the cwd-derived dir, then search all
+    // project dirs (covers a cwd that doesn't match the launch dir,
+    // e.g. git worktrees). If the env var is set but no transcript is
+    // found, return null rather than guessing a wrong file — under-
+    // reporting beats mis-reporting.
+    const direct = path.join(
+      transcriptDirForCwd(process.cwd()),
+      `${sessionId}.jsonl`,
+    );
+    if (isFile(direct)) return { sessionId, path: direct };
+    return findTranscriptById(sessionId);
+  }
+  return mostRecentSession();
+}
+
+function isFile(p) {
+  try {
+    return fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+}
+
+// Search every ~/.claude/projects/<encoded-cwd>/ dir for <id>.jsonl.
+// Used when the active transcript isn't under the dir process.cwd()
+// encodes to (e.g. the agent launched from a git worktree).
+function findTranscriptById(sessionId) {
+  const projectsDir = path.join(os.homedir(), ".claude", "projects");
+  let dirs;
+  try {
+    dirs = fs.readdirSync(projectsDir);
+  } catch {
+    return null;
+  }
+  for (const d of dirs) {
+    const candidate = path.join(projectsDir, d, `${sessionId}.jsonl`);
+    if (isFile(candidate)) return { sessionId, path: candidate };
+  }
+  return null;
+}
+
+// Legacy fallback: pick the most-recently-modified .jsonl in the
+// cwd-derived transcript dir. Only used when CLAUDE_CODE_SESSION_ID is
+// unavailable. Returns null when there's nothing to read.
+function mostRecentSession() {
   let entries;
   try {
     entries = fs.readdirSync(transcriptDirForCwd(process.cwd()));
