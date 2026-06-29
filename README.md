@@ -17,7 +17,7 @@ Codex home directory:
 | Piece | Claude Code | Codex |
 | --- | --- | --- |
 | API access | MCP server (bundled) | **same MCP server** — `mcp/draft-mcp.js`, registered in `~/.codex/config.toml` |
-| Commands | `/draft:*` skills | custom prompts in `~/.codex/prompts/` → `/prompts:draft-work`, `/prompts:draft-queue` |
+| Commands | `/draft:*` skills | custom prompts in `~/.codex/prompts/` → `/prompts:draft-work`, `/prompts:draft-queue`, `/prompts:draft-refresh` |
 | "Draft is connected" notice | `SessionStart` hook | no equivalent — an optional `~/.codex/AGENTS.md` snippet (see `AGENTS.snippet.md`) |
 
 The MCP server is byte-for-byte the same one the Claude Code plugin
@@ -93,6 +93,11 @@ After install + restart, in a Codex session:
 - **`/prompts:draft-work`** — work the queue: claim the top story,
   implement it, and finish it. Pass `STORY=<number>` to pick up a
   specific story instead of the top of the queue.
+- **`/prompts:draft-refresh`** — re-fetch Draft's authoritative
+  operating instructions (the workspace context) from the API and adopt
+  them as canonical for the rest of the session (read-only). Handy for a
+  long-running session when the workflow rules may have changed
+  server-side.
 
 ## MCP tools
 
@@ -117,8 +122,9 @@ The `draft` MCP server exposes:
 
 ```
 mcp/draft-mcp.js        zero-dependency MCP server wrapping the Draft API
-prompts/draft-work.md   /prompts:draft-work  — the ticket-working loop
-prompts/draft-queue.md  /prompts:draft-queue — read-only queue view
+prompts/draft-work.md    /prompts:draft-work    — the ticket-working loop
+prompts/draft-queue.md   /prompts:draft-queue   — read-only queue view
+prompts/draft-refresh.md /prompts:draft-refresh — re-pull the workflow context
 scripts/install.sh      copies prompts + wires up config.toml
 AGENTS.snippet.md       optional ~/.codex/AGENTS.md "Draft is connected" note
 ```

@@ -30,7 +30,7 @@ fi
 mkdir -p "$PROMPTS_DIR"
 cp "$REPO_DIR"/prompts/*.md "$PROMPTS_DIR/"
 echo "  ✓ copied prompts → $PROMPTS_DIR"
-echo "    (/prompts:draft-work, /prompts:draft-queue)"
+echo "    (/prompts:draft-work, /prompts:draft-queue, /prompts:draft-refresh)"
 
 # --- 2. MCP server in config.toml -----------------------------------
 mkdir -p "$CODEX_HOME"
