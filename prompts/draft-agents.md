@@ -26,9 +26,11 @@ daemon over loopback and never handles an operator token.
    node "${CODEX_HOME:-$HOME/.codex}/scripts/foundry-registry.js" keys
    ```
 
-   Prints keys grouped by project, marked available / in use, env-tagged, with
-   `[PROD]` flagged. Show me the list and ask which agent to work as. Only
-   `available` keys can be claimed; be explicit about `[PROD]` choices.
+   Prints a table with a **Cross-Project** column (✓ = a workspace-level agent,
+   works across every project) and a **Project** column (the team a
+   project-scoped agent belongs to), plus availability, env, and a `[PROD]`
+   flag. Show me the list and ask which agent to work as. Only `available` keys
+   can be claimed; be explicit about `[PROD]` choices.
 
 3. **Claim the chosen key** (with its `key_id` and `env`):
 

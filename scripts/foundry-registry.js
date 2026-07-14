@@ -154,31 +154,54 @@ async function cmdKeys(json) {
     process.stdout.write("No leasable keys. Are you logged in? Try `foundry login`.\n");
     return;
   }
-  // Group by project (organization) for a readable, pickable listing.
-  const byProject = new Map();
-  for (const k of keys) {
-    const proj = k.project || "(no project)";
-    if (!byProject.has(proj)) byProject.set(proj, []);
-    byProject.get(proj).push(k);
+  // A columnar listing (#379): agent + key, a Cross-Project check for
+  // workspace-level agents, the project team name for project-scoped ones,
+  // availability, and the ids needed to claim.
+  const rows = keys.map((k, idx) => {
+    const held =
+      k.availability !== "available" && k.in_use_by
+        ? `in use — ${k.in_use_by.hostname || "?"}${k.in_use_by.plugin ? " / " + k.in_use_by.plugin : ""}`
+        : k.availability === "available"
+          ? "available"
+          : "in use";
+    return {
+      n: String(idx + 1),
+      agent: `${k.agent_name}${k.is_prod ? " [PROD]" : ""}`,
+      key: `${k.name} (${k.prefix}…)`,
+      cross: k.cross_project ? "✓" : "",
+      project: k.cross_project ? "" : k.project_name || "—",
+      status: held,
+      env: k.env || "",
+      keyId: k.key_id,
+    };
+  });
+
+  const cols = [
+    { h: "#", get: (r) => r.n },
+    { h: "AGENT", get: (r) => r.agent },
+    { h: "KEY", get: (r) => r.key },
+    { h: "CROSS-PROJECT", get: (r) => r.cross },
+    { h: "PROJECT", get: (r) => r.project },
+    { h: "STATUS", get: (r) => r.status },
+    { h: "ENV", get: (r) => r.env },
+  ];
+  const widths = cols.map((c) =>
+    Math.max(c.h.length, ...rows.map((r) => c.get(r).length)),
+  );
+  const line = (cells) =>
+    cells.map((v, i) => String(v).padEnd(widths[i])).join("  ").trimEnd();
+  process.stdout.write("\n" + line(cols.map((c) => c.h)) + "\n");
+  for (const r of rows) {
+    process.stdout.write(line(cols.map((c) => c.get(r))) + "\n");
+    // The key_id is long; put it on its own indented line so the table stays
+    // readable but the claim id is still to hand.
+    process.stdout.write(`     key_id=${r.keyId}\n`);
   }
-  let i = 0;
-  for (const [proj, group] of byProject) {
-    process.stdout.write(`\nProject ${proj}\n`);
-    for (const k of group) {
-      i += 1;
-      const avail = k.availability === "available" ? "available" : "in use";
-      const prod = k.is_prod ? " [PROD]" : "";
-      const who =
-        k.availability !== "available" && k.in_use_by
-          ? ` — held by ${k.in_use_by.hostname || "?"}${k.in_use_by.plugin ? " / " + k.in_use_by.plugin : ""}`
-          : "";
-      process.stdout.write(
-        `  ${i}. ${k.agent_name} · ${k.name} (${k.prefix}…)${prod} — ${avail}${who}\n` +
-          `      env=${k.env} key_id=${k.key_id}\n`,
-      );
-    }
-  }
-  process.stdout.write("\nClaim one with: node foundry-registry.js claim <key_id> [--env <env>]\n");
+  process.stdout.write(
+    "\nCROSS-PROJECT ✓ = a workspace-level agent (works across every project); " +
+      "PROJECT = the team a project-scoped agent belongs to.\n" +
+      "Claim one with: node foundry-registry.js claim <key_id> [--env <env>]\n",
+  );
 }
 
 async function cmdClaim(keyId, opts) {
