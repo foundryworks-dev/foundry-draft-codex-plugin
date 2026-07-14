@@ -98,6 +98,16 @@ After install + restart, in a Codex session:
   them as canonical for the rest of the session (read-only). Handy for a
   long-running session when the workflow rules may have changed
   server-side.
+- **`/prompts:draft-agents`** — pick an agent key from the **Foundry
+  Agent Registry** instead of exporting one by hand. When the local
+  `foundry daemon` is running and `DRAFT_API_KEY` is unset, this lists
+  the keys you may lease (grouped by project, marked available / in
+  use), you choose one, and the plugin claims it for the session via the
+  daemon. If `DRAFT_API_KEY` is already set, the registry flow is
+  skipped entirely. `install.sh` places the broker client at
+  `~/.codex/scripts/foundry-registry.js`. (Codex has no session-end
+  hook, so release the key with the broker's `release` when done — the
+  daemon/server idle auto-release is the backstop.)
 
 ## MCP tools
 

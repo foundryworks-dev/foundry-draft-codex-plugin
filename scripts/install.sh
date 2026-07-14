@@ -30,7 +30,15 @@ fi
 mkdir -p "$PROMPTS_DIR"
 cp "$REPO_DIR"/prompts/*.md "$PROMPTS_DIR/"
 echo "  ✓ copied prompts → $PROMPTS_DIR"
-echo "    (/prompts:draft-work, /prompts:draft-queue, /prompts:draft-refresh)"
+echo "    (/prompts:draft-work, /prompts:draft-queue, /prompts:draft-refresh, /prompts:draft-agents)"
+
+# --- 1b. registry broker client -------------------------------------
+# The draft-agents prompt shells out to this to talk to the local
+# Foundry Agent Registry daemon (#194). Prompts run from ~/.codex, so
+# the client is installed under $CODEX_HOME/scripts where they can find it.
+mkdir -p "$CODEX_HOME/scripts"
+cp "$REPO_DIR"/scripts/foundry-registry.js "$CODEX_HOME/scripts/"
+echo "  ✓ copied registry broker client → $CODEX_HOME/scripts/foundry-registry.js"
 
 # --- 2. MCP server in config.toml -----------------------------------
 mkdir -p "$CODEX_HOME"

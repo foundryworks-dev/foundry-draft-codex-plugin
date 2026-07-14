@@ -19,6 +19,8 @@ If `DRAFT_API_KEY` is set in the environment, this machine is wired to
 a Foundry/Draft workspace. To see the agent work queue, run
 `/prompts:draft-queue`. To start working tickets from it, run
 `/prompts:draft-work`. To re-pull the latest workflow instructions
-mid-session, run `/prompts:draft-refresh`. Do not start working tickets
-unprompted — wait to be asked.
+mid-session, run `/prompts:draft-refresh`. If `DRAFT_API_KEY` is *not*
+set but a Foundry Agent Registry daemon is running, run
+`/prompts:draft-agents` to pick and claim a key from the registry
+first. Do not start working tickets unprompted — wait to be asked.
 ```
