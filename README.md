@@ -117,6 +117,7 @@ The `draft` MCP server exposes:
 | `add_link`          | Attach a PR/commit URL to a story.                              |
 | `create_story`      | File a new story (lands in the backlog for triage).             |
 | `update_story`      | Patch arbitrary story fields (points, labels, …).               |
+| `library_write`     | Create or update a Library wiki page by (project, slug).        |
 
 ## Layout
 

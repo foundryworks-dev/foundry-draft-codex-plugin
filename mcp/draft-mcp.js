@@ -579,6 +579,48 @@ const TOOLS = [
     },
   },
   {
+    name: "library_write",
+    description:
+      "Create or update a Library wiki page by (project, slug). Upsert: creates the page if the slug is new, otherwise appends a new revision. Body is HTML (sanitized server-side); the agent-friendly (L2) and agent-optimized (L3) representations are derived automatically. Requires the project's agents_can_edit_library setting to be enabled.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project: {
+          type: "string",
+          description:
+            "The project slug (not UUID) — the same identifier the read/context API uses.",
+        },
+        slug: {
+          type: "string",
+          description:
+            "URL-safe page slug; the upsert key together with project. Omit to derive it from the title.",
+        },
+        title: { type: "string", description: "Page title." },
+        body: {
+          type: "string",
+          description: "Page body as HTML; sanitized server-side.",
+        },
+        change_summary: {
+          type: "string",
+          description: "Optional edit summary recorded on this revision.",
+        },
+        parent_slug: {
+          type: "string",
+          description:
+            "Optional slug of an existing page to nest this one under.",
+        },
+      },
+      required: ["project", "title", "body"],
+    },
+    run: (a) => {
+      const body = { project: a.project, title: a.title, body: a.body };
+      if (a.slug != null) body.slug = a.slug;
+      if (a.change_summary != null) body.change_summary = a.change_summary;
+      if (a.parent_slug != null) body.parent_slug = a.parent_slug;
+      return api("PUT", "/v1/library/page", body);
+    },
+  },
+  {
     name: "update_story",
     description:
       "Patch fields on a story (points, labels, ready_for_agent, etc.). For claiming ownership prefer claim_story, which resolves your user id for you.",
