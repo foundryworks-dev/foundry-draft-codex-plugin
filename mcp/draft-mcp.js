@@ -530,7 +530,7 @@ const TOOLS = [
   {
     name: "create_story",
     description:
-      "File a new story. The server forces it into the backlog as unstarted and unowned — agents file work for humans to triage. Check the board for duplicates first. Optionally attach the story to an epic and/or a release at creation time.",
+      "File a new story. The server forces it into the backlog as unstarted and unowned — agents file work for humans to triage. Check the board for duplicates first. Optionally attach the story to an epic and/or a release, and stamp created_from_story_id when it's derived from another story.",
     inputSchema: {
       type: "object",
       properties: {
@@ -559,6 +559,11 @@ const TOOLS = [
           description:
             "Optional release UUID to scope the story to. Look it up from GET /v1/projects/{id}/board (board.releases[].id).",
         },
+        created_from_story_id: {
+          type: "string",
+          description:
+            "Optional source-story UUID recording provenance when this story is derived from another (e.g. an architect breaking a design into implementation stories). Use the parent's id (UUID, not its #number) from GET /v1/projects/{id}/board.",
+        },
       },
       required: ["project_id", "type", "title"],
     },
@@ -568,6 +573,8 @@ const TOOLS = [
       if (a.points != null) body.points = a.points;
       if (a.epic_id != null) body.epic_id = a.epic_id;
       if (a.release_id != null) body.release_id = a.release_id;
+      if (a.created_from_story_id != null)
+        body.created_from_story_id = a.created_from_story_id;
       return api("POST", `/v1/projects/${a.project_id}/stories`, body);
     },
   },
