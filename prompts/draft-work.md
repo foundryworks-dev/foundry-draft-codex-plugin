@@ -10,8 +10,13 @@ MCP server.
 
 The MCP server reads its config from the environment:
 
-- `DRAFT_API_KEY` (required) — the workspace agent API key. If a tool
-  call reports it's unset, tell me and stop.
+- `DRAFT_API_KEY` — the workspace agent API key. If it's not set in the
+  environment, resolve it from the registry:
+  `node "${CODEX_HOME:-$HOME/.codex}/scripts/foundry-registry.js" resolve`
+  prints `DRAFT_API_KEY<TAB>DRAFT_API_URL` (env if set, else a lease
+  claimed via `/prompts:draft-agents`) — use it over REST. If that exits
+  non-zero, tell me to run `/prompts:draft-agents` or export
+  `DRAFT_API_KEY`, and stop.
 - `DRAFT_API_URL` (optional) — defaults to
   `https://draft.foundryworks.dev`.
 
