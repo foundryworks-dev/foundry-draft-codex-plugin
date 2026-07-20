@@ -312,6 +312,64 @@ async function patchTokensUsedAtFinish(projectId, number) {
 
 // ---------------------------------------------------------------- HTTP
 
+// ---------------------------------------------------------------- MODEL
+// Resolve the model this agent is running so the Draft API records it on
+// each request (#420 — the client side of #416's X-Foundry-Model capture,
+// which populates model history for raw-fdrk_-key agents that never call
+// report-usage). Prefer an explicit FOUNDRY_MODEL override; otherwise read
+// the most recent message.model from the session transcript (the harness
+// records the live model there — e.g. "claude-opus-4-8"). Cached briefly so
+// we don't re-read the transcript on every API call.
+let modelCache = null; // { model, version, at }
+const MODEL_TTL_MS = 30000;
+
+function readModelFromTranscript() {
+  const sess = currentSession();
+  if (!sess || !sess.path) return "";
+  let data;
+  try {
+    data = fs.readFileSync(sess.path, "utf8");
+  } catch {
+    return "";
+  }
+  let model = "";
+  for (const line of data.split("\n")) {
+    if (!line.trim()) continue;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const m = row && row.message && row.message.model;
+    // Skip Claude Code's synthetic placeholder rows.
+    if (m && m !== "<synthetic>") model = m;
+  }
+  return model;
+}
+
+// { model, version } for the current agent, or empty model when unknown.
+function resolveModel() {
+  const envModel = (process.env.FOUNDRY_MODEL || "").trim();
+  const version = (process.env.FOUNDRY_MODEL_VERSION || "").trim();
+  if (envModel) return { model: envModel, version };
+  const now = Date.now();
+  if (modelCache && now - modelCache.at < MODEL_TTL_MS) return modelCache;
+  modelCache = { model: readModelFromTranscript(), version, at: now };
+  return modelCache;
+}
+
+// Header pair the Draft API reads to record the agent's model (#416).
+// Omitted entirely when the model can't be resolved — under-reporting
+// beats mis-reporting, and the backend treats a blank model as a no-op.
+function modelHeaders() {
+  const { model, version } = resolveModel();
+  if (!model) return {};
+  const h = { "X-Foundry-Model": model };
+  if (version) h["X-Foundry-Model-Version"] = version;
+  return h;
+}
+
 async function api(method, path, body) {
   if (!API_KEY) {
     throw new Error(
@@ -323,6 +381,7 @@ async function api(method, path, body) {
     method,
     headers: {
       Authorization: "Bearer " + API_KEY,
+      ...modelHeaders(),
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
