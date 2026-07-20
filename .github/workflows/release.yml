@@ -1,0 +1,72 @@
+name: release
+
+# Package the Codex plugin into a versioned tarball and publish it +
+# SHA256SUMS + latest.txt to the public Cloudflare R2 bucket behind
+# dl.foundryworks.dev, under codex-plugin/<version>/. The remote installer
+# (foundryworks.dev/install-codex.sh, #419) downloads + SHA-256-verifies these.
+# Triggered by pushing a version tag, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
+#
+# Same infra + secrets as the `foundry` CLI release (#370): R2_ACCESS_KEY_ID,
+# R2_SECRET_ACCESS_KEY, R2_ACCOUNT_ID, R2_BUCKET. This is a pure-Node plugin, so
+# there's nothing to compile — we just archive the runtime files.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish to R2
+    runs-on: ubuntu-latest
+    # Environment protection (optional): attach the R2 secrets to a `release`
+    # environment and uncomment to gate this job behind it.
+    # environment: release
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package tarball
+        run: |
+          mkdir -p dist
+          # Archive only the runtime files the installer wires up. Paths land
+          # at the tarball root, so extraction yields mcp/, prompts/, scripts/.
+          tar -czf "dist/foundry-draft-codex-plugin.tar.gz" \
+            mcp prompts scripts AGENTS.snippet.md README.md LICENSE
+          ls -l dist
+
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          sha256sum foundry-draft-codex-plugin.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload release to R2
+        working-directory: dist
+        run: |
+          version="${GITHUB_REF_NAME}"
+          dest="s3://${R2_BUCKET}/codex-plugin/${version}"
+          echo "Publishing codex-plugin ${version} to ${dest}"
+          aws s3 cp foundry-draft-codex-plugin.tar.gz "${dest}/foundry-draft-codex-plugin.tar.gz" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type application/gzip
+          aws s3 cp SHA256SUMS "${dest}/SHA256SUMS" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type text/plain
+
+      - name: Update latest pointer
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          printf '%s\n' "${GITHUB_REF_NAME}" > latest.txt
+          aws s3 cp latest.txt "s3://${R2_BUCKET}/codex-plugin/latest.txt" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type text/plain \
+            --cache-control 'no-cache'

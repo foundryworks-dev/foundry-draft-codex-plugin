@@ -39,15 +39,35 @@ copied into this repo; it may be extracted to a shared package later.)
 ## Install
 
 ```bash
+curl -fsSL https://foundryworks.dev/install-codex.sh | sh
+```
+
+That's the Codex equivalent of "/plugin install": it fetches a
+versioned, SHA-256-verified plugin tarball from `dl.foundryworks.dev`
+(no `git clone`), installs it to `~/.foundry/codex-draft-plugin/<version>`
+(with a `current` symlink for clean upgrades), and idempotently wires a
+`[mcp_servers.draft]` block into `~/.codex/config.toml` — inside a marked
+`# BEGIN/END foundry-draft` block, so re-running upgrades in place and
+your other config is never touched. Prompts and the registry broker
+client go into `~/.codex/prompts/` and `~/.codex/scripts/`.
+
+Pin a version with `FOUNDRY_CODEX_VERSION=v0.1.0`, or uninstall with:
+
+```bash
+curl -fsSL https://foundryworks.dev/install-codex.sh | sh -s -- --uninstall
+```
+
+### From a clone (development)
+
+```bash
 git clone https://github.com/foundryworks-dev/foundry-draft-codex-plugin
 cd foundry-draft-codex-plugin
 ./scripts/install.sh
 ```
 
-`install.sh` copies the custom prompts into `~/.codex/prompts/` and
-adds a `[mcp_servers.draft]` block to `~/.codex/config.toml` (it skips
-the block if you already have one). It's idempotent — re-run it to
-refresh the prompts after a `git pull`.
+`scripts/install.sh` wires the config to point at your clone (rather than
+a downloaded release) — handy when hacking on the plugin. Both installers
+are idempotent.
 
 **Requirement:** the MCP server is a Node script — Node 18+ must be on
 `PATH` (it uses the built-in `fetch`). No npm dependencies, no build
