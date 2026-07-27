@@ -43,12 +43,16 @@ echo "  ✓ copied registry broker client → $CODEX_HOME/scripts/foundry-regist
 # --- 2. MCP server in config.toml -----------------------------------
 mkdir -p "$CODEX_HOME"
 touch "$CONFIG"
-if grep -q '^\[mcp_servers\.draft\]' "$CONFIG"; then
-  echo "  • [mcp_servers.draft] already in $CONFIG — left untouched"
-else
+# Two entries, same script. The tool namespace a client exposes
+# (mcp__draft__queue vs mcp__foundry__queue) comes from the *config key*,
+# not from anything the MCP server itself returns — tools/list hands back
+# bare names. So aliasing the prefix means mounting the server twice
+# (#457). `foundry` is the name to use going forward; `draft` stays until
+# the telemetry gate (#458) says nobody is calling it.
+add_entry() { # $1 = config key
   cat >> "$CONFIG" <<EOF
 
-[mcp_servers.draft]
+[mcp_servers.$1]
 command = "node"
 args = ["$REPO_DIR/mcp/draft-mcp.js"]
 # Forward the agent credentials from your shell environment rather
@@ -57,8 +61,16 @@ args = ["$REPO_DIR/mcp/draft-mcp.js"]
 # and falls back to DRAFT_* (#456).
 env_vars = ["FOUNDRY_API_KEY", "FOUNDRY_API_URL", "DRAFT_API_KEY", "DRAFT_API_URL"]
 EOF
-  echo "  ✓ added [mcp_servers.draft] → $CONFIG"
-fi
+  echo "  ✓ added [mcp_servers.$1] → $CONFIG"
+}
+
+for key in foundry draft; do
+  if grep -q "^\[mcp_servers\.$key\]" "$CONFIG"; then
+    echo "  • [mcp_servers.$key] already in $CONFIG — left untouched"
+  else
+    add_entry "$key"
+  fi
+done
 
 cat <<'EOF'
 

@@ -109,6 +109,23 @@ no change (#456).
 
 Get an API key from your Draft workspace under **Settings → Agents**.
 
+### Tool names: `foundry` and `draft`
+
+The plugin registers the MCP server under **two keys**, so both tool
+namespaces resolve to the same handler:
+
+| Namespace | Status |
+| --------- | ------ |
+| `mcp__foundry__*` | the name to use going forward |
+| `mcp__draft__*`   | still works; retired only once usage telemetry says nobody calls it (#458) |
+
+The prefix comes from the **client-side config key**, not from anything the
+server returns — `tools/list` hands back bare tool names like `queue`. So
+aliasing a namespace means mounting the same script twice. The cost is that
+every tool appears twice in a session's tool list; that is inherent to MCP
+namespacing, not something the server can dedupe (#457).
+
+
 ## Use
 
 After install + restart, in a Codex session:
