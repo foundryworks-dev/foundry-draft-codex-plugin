@@ -262,7 +262,7 @@ function resolveEnv(suffix) {
 function cmdResolve() {
   const key = resolveEnv("API_KEY");
   if (key.value) {
-    const url = resolveEnv("API_URL").value || "https://draft.foundryworks.dev";
+    const url = resolveEnv("API_URL").value || "https://app.foundryworks.dev";
     // stdout is the data channel callers parse as `KEY\tURL` — the notice
     // goes to stderr so it can't be mistaken for part of the credential.
     if (key.legacy) {

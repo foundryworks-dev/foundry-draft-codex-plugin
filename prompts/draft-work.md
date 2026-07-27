@@ -18,7 +18,7 @@ The MCP server reads its config from the environment:
   non-zero, tell me to run `/prompts:draft-agents` or export
   `FOUNDRY_API_KEY`, and stop.
 - `FOUNDRY_API_URL` (optional) — defaults to
-  `https://draft.foundryworks.dev`.
+  `https://app.foundryworks.dev`.
 
 ## 1. Load the workflow instructions — first, every time
 
