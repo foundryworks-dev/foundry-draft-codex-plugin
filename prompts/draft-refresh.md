@@ -8,7 +8,7 @@ is how you re-ground a session on the latest rules without restarting
 it. Read-only: it claims, starts, and modifies nothing.
 
 1. Call the `context` tool from the `draft` MCP server. It reads
-   `DRAFT_API_KEY` / `DRAFT_API_URL` from the environment; if the call
+   `FOUNDRY_API_KEY` / `FOUNDRY_API_URL` from the environment; if the call
    reports the key is unset, tell me and stop. The tool re-fetches the
    board model, the story state machine, the
    claim/start/comment/transition/finish mechanics, the @-mention

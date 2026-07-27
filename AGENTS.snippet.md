@@ -8,18 +8,18 @@ the start of every session.
 If you'd like Codex to be aware of the Draft commands, append the
 block below to `~/.codex/AGENTS.md`. It's **opt-in** — and note it's
 unconditional: unlike the Claude Code hook (which only fired when
-`DRAFT_API_KEY` was set), this text is in scope for every session in
+`FOUNDRY_API_KEY` was set), this text is in scope for every session in
 every repo. Keep it short for that reason, or skip it and just invoke
 `/prompts:draft-work` explicitly when you want it.
 
 ```markdown
 ## Foundry/Draft
 
-If `DRAFT_API_KEY` is set in the environment, this machine is wired to
+If `FOUNDRY_API_KEY` is set in the environment, this machine is wired to
 a Foundry/Draft workspace. To see the agent work queue, run
 `/prompts:draft-queue`. To start working tickets from it, run
 `/prompts:draft-work`. To re-pull the latest workflow instructions
-mid-session, run `/prompts:draft-refresh`. If `DRAFT_API_KEY` is *not*
+mid-session, run `/prompts:draft-refresh`. If `FOUNDRY_API_KEY` is *not*
 set but a Foundry Agent Registry daemon is running, run
 `/prompts:draft-agents` to pick and claim a key from the registry
 first. Do not start working tickets unprompted — wait to be asked.

@@ -2,7 +2,7 @@
 // Foundry Agent Registry broker client (Registry S7, #194).
 //
 // A thin client for the local `foundry daemon` (Registry S9): the plugins call
-// this to pick + claim an agent key instead of being handed a DRAFT_API_KEY by
+// this to pick + claim an agent key instead of being handed a FOUNDRY_API_KEY by
 // hand. The daemon holds the operator's login and owns all the server-side
 // lease calls; this client only talks to the daemon's loopback IPC.
 //
@@ -118,7 +118,7 @@ async function requireDaemon() {
     fail(
       "The Foundry Agent Registry daemon isn't running.\n" +
         "Start it with `foundry daemon &` (and `foundry login` if you haven't yet),\n" +
-        "or set DRAFT_API_KEY directly to skip the registry.",
+        "or set FOUNDRY_API_KEY directly to skip the registry.",
       3,
     );
   }
@@ -245,13 +245,33 @@ async function cmdClaim(keyId, opts) {
   process.stdout.write(JSON.stringify(record, null, 2) + "\n");
 }
 
-// resolve: print the effective credential as `KEY\tURL`. An explicit
-// DRAFT_API_KEY in the environment always wins (backward compatible); otherwise
-// fall back to the claimed active lease. Exit 4 if neither is available.
+// FOUNDRY_* wins → else the legacy DRAFT_* name → else undefined. Returns the
+// value alongside the name it came from, so callers can report legacy use
+// once rather than guessing which name supplied it (#456).
+function resolveEnv(suffix) {
+  const preferred = process.env[`FOUNDRY_${suffix}`];
+  if (preferred) return { value: preferred, name: `FOUNDRY_${suffix}`, legacy: false };
+  const legacy = process.env[`DRAFT_${suffix}`];
+  if (legacy) return { value: legacy, name: `DRAFT_${suffix}`, legacy: true };
+  return { value: "", name: "", legacy: false };
+}
+
+// resolve: print the effective credential as `KEY\tURL`. An explicit key in the
+// environment always wins (backward compatible); otherwise fall back to the
+// claimed active lease. Exit 4 if neither is available.
 function cmdResolve() {
-  if (process.env.DRAFT_API_KEY) {
-    const url = process.env.DRAFT_API_URL || "https://draft.foundryworks.dev";
-    process.stdout.write(`${process.env.DRAFT_API_KEY}\t${url}\n`);
+  const key = resolveEnv("API_KEY");
+  if (key.value) {
+    const url = resolveEnv("API_URL").value || "https://draft.foundryworks.dev";
+    // stdout is the data channel callers parse as `KEY\tURL` — the notice
+    // goes to stderr so it can't be mistaken for part of the credential.
+    if (key.legacy) {
+      process.stderr.write(
+        `notice: using ${key.name}. The FOUNDRY_* equivalents are preferred; ` +
+          `DRAFT_* keeps working.\n`,
+      );
+    }
+    process.stdout.write(`${key.value}\t${url}\n`);
     return;
   }
   const lease = readJSON(activeLeasePath());
@@ -260,8 +280,9 @@ function cmdResolve() {
     return;
   }
   fail(
-    "No credential: DRAFT_API_KEY isn't set and no key is claimed.\n" +
-      "Run the agents command to pick one from the registry.",
+    "No credential: FOUNDRY_API_KEY isn't set (nor the legacy DRAFT_API_KEY) " +
+      "and no key is claimed.\nRun the agents command to pick one from the " +
+      "registry.",
     4,
   );
 }
