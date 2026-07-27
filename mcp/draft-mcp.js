@@ -26,15 +26,16 @@ const os = require("os");
 const path = require("path");
 
 // FOUNDRY_* wins → else the legacy DRAFT_* name → else the built-in
-// default. Tracks whether a legacy name actually supplied a value so we
-// can say so once (below) and, later, emit the retirement signal (#458).
-let legacyEnvName = "";
+// default. Every legacy name that actually supplied a value is recorded:
+// once for the stderr notice below, and once per request for the
+// retirement signal the server logs (#458).
+const legacyEnvNames = [];
 function resolveEnv(suffix, fallback) {
   const preferred = process.env[`FOUNDRY_${suffix}`];
   if (preferred) return preferred;
   const legacy = process.env[`DRAFT_${suffix}`];
   if (legacy) {
-    legacyEnvName = legacyEnvName || `DRAFT_${suffix}`;
+    legacyEnvNames.push(`DRAFT_${suffix}`);
     return legacy;
   }
   return fallback;
@@ -49,11 +50,35 @@ const API_KEY = resolveEnv("API_KEY", "");
 // Once per process, never per request (#456). It has to go to stderr:
 // stdout is the MCP JSON-RPC channel, and a stray line there corrupts
 // the stream for the client.
-if (legacyEnvName) {
+if (legacyEnvNames.length) {
   process.stderr.write(
-    `notice: using ${legacyEnvName} (and any other DRAFT_* names). The ` +
+    `notice: using ${legacyEnvNames[0]} (and any other DRAFT_* names). The ` +
       `FOUNDRY_* equivalents are preferred; DRAFT_* keeps working.\n`,
   );
+}
+
+// Which MCP key this process was mounted under (#458). The tool
+// namespace a client exposes — mcp__foundry__queue vs mcp__draft__queue —
+// comes from the client-side config key, and `tools/list` hands back bare
+// names, so the server cannot otherwise tell which namespace it is
+// serving. #457 mounts the same script twice; each registration passes
+// its own key here so the two processes are distinguishable.
+//
+// Unset (an older config written before this landed, or a hand-rolled
+// registration) means "don't report" rather than "assume legacy" —
+// guessing would put a retirement decision on invented evidence.
+const SERVER_KEY = (() => {
+  const flag = process.argv.slice(2).find((a) => a.startsWith("--server-key="));
+  return flag ? flag.slice("--server-key=".length).trim() : "";
+})();
+
+// The legacy names this process is actually running on, reported to the
+// API so the server can log them against the agent's identity (#458). A
+// process fully on the new names sends nothing at all.
+function legacyHeaders() {
+  const parts = legacyEnvNames.map((n) => `env=${n}`);
+  if (SERVER_KEY === "draft") parts.push("prefix=draft");
+  return parts.length ? { "X-Foundry-Legacy": parts.join(",") } : {};
 }
 
 const SERVER_INFO = { name: "draft", version: "0.6.0" };
@@ -414,6 +439,7 @@ async function api(method, path, body) {
     headers: {
       Authorization: "Bearer " + API_KEY,
       ...modelHeaders(),
+      ...legacyHeaders(),
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,

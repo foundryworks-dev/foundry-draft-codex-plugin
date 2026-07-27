@@ -54,7 +54,11 @@ add_entry() { # $1 = config key
 
 [mcp_servers.$1]
 command = "node"
-args = ["$REPO_DIR/mcp/draft-mcp.js"]
+# --server-key tells the process which namespace it is serving. Both
+# entries run the same script, and tools/list returns bare names either
+# way, so without it the two are indistinguishable from the inside —
+# and the legacy-prefix signal #458 needs would be unmeasurable.
+args = ["$REPO_DIR/mcp/draft-mcp.js", "--server-key=$1"]
 # Forward the agent credentials from your shell environment rather
 # than hard-coding the key into this file. Both name pairs are listed so
 # an operator on either one keeps working — the server prefers FOUNDRY_*
