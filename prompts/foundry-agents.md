@@ -44,7 +44,7 @@ daemon over loopback and never handles an operator token.
    it. Tell me which agent + env I'm now working as. A 409 means someone else
    claimed it first — go back to step 2.
 
-4. **Proceed:** `/prompts:draft-queue` and `/prompts:draft-work` resolve the
+4. **Proceed:** `/prompts:foundry-queue` and `/prompts:foundry-work` resolve the
    credential with
    `node "${CODEX_HOME:-$HOME/.codex}/scripts/foundry-registry.js" resolve`
    (env `FOUNDRY_API_KEY` if set, otherwise the claimed lease) and operate as
