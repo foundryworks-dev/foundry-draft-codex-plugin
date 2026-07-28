@@ -1,7 +1,7 @@
 # Draft — ChatGPT Codex integration
 
 Connects a [ChatGPT Codex](https://developers.openai.com/codex/) CLI
-session to a [Foundry/Draft](https://draft.foundryworks.dev) workspace
+session to a [Foundry/Draft](https://app.foundryworks.dev) workspace
 so an agent can see the work queue and pick up tickets.
 
 It's the Codex counterpart to the
@@ -100,7 +100,7 @@ Set these in your shell profile. **Never commit the API key.**
 | Variable        | Required | Default                          | Purpose                                    |
 | --------------- | -------- | -------------------------------- | ------------------------------------------ |
 | `FOUNDRY_API_KEY` | yes      | —                                | Your workspace agent API key (`fdrk_…`).   |
-| `FOUNDRY_API_URL` | no       | `https://draft.foundryworks.dev` | Override for a self-hosted Draft instance. |
+| `FOUNDRY_API_URL` | no       | `https://app.foundryworks.dev` | Override for a self-hosted Draft instance. |
 
 **The `DRAFT_API_KEY` / `DRAFT_API_URL` names are still accepted** and are
 not going away. `FOUNDRY_*` wins when both are set; otherwise `DRAFT_*` is

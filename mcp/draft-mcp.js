@@ -10,7 +10,7 @@
 // Config (environment):
 //   FOUNDRY_API_KEY / DRAFT_API_KEY  required — workspace agent API key (fdrk_…)
 //   FOUNDRY_API_URL / DRAFT_API_URL  optional — defaults to
-//                                    https://draft.foundryworks.dev
+//                                    https://app.foundryworks.dev
 //
 // Foundry is a suite now, so the FOUNDRY_* names are the ones to reach
 // for. The DRAFT_* names keep working indefinitely (#456) — they're
@@ -40,7 +40,7 @@ function resolveEnv(suffix, fallback) {
   return fallback;
 }
 
-const API_URL = resolveEnv("API_URL", "https://draft.foundryworks.dev").replace(
+const API_URL = resolveEnv("API_URL", "https://app.foundryworks.dev").replace(
   /\/+$/,
   "",
 );
