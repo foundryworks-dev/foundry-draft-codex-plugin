@@ -18,7 +18,7 @@ echo "Foundry/Draft Codex integration — installing into $CODEX_HOME"
 # --- Node check (the MCP server needs Node 18+ for global fetch) ----
 if ! command -v node >/dev/null 2>&1; then
   echo "  ! Node is not on PATH. The MCP server needs Node 18+ — install it"
-  echo "    before using /prompts:draft-work or /prompts:draft-queue."
+  echo "    before using /prompts:foundry-work or /prompts:foundry-queue."
 else
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
   if [ "$major" -lt 18 ]; then
@@ -30,7 +30,7 @@ fi
 mkdir -p "$PROMPTS_DIR"
 cp "$REPO_DIR"/prompts/*.md "$PROMPTS_DIR/"
 echo "  ✓ copied prompts → $PROMPTS_DIR"
-echo "    (/prompts:draft-work, /prompts:draft-queue, /prompts:draft-refresh, /prompts:draft-agents)"
+echo "    (/prompts:foundry-work, /prompts:foundry-queue, /prompts:foundry-refresh, /prompts:foundry-agents)"
 
 # --- 1b. registry broker client -------------------------------------
 # The draft-agents prompt shells out to this to talk to the local
@@ -85,7 +85,7 @@ Done. Next steps:
       export FOUNDRY_API_URL=https://your-foundry-host
   • The legacy DRAFT_API_KEY / DRAFT_API_URL names still work if you
     already have them exported — no need to change anything.
-  • Restart Codex, then try:  /prompts:draft-queue
+  • Restart Codex, then try:  /prompts:foundry-queue
 
 Optional: see AGENTS.snippet.md for a one-paragraph note you can add
 to ~/.codex/AGENTS.md so Codex knows the Draft commands exist.

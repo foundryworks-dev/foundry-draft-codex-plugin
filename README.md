@@ -17,7 +17,7 @@ Codex home directory:
 | Piece | Claude Code | Codex |
 | --- | --- | --- |
 | API access | MCP server (bundled) | **same MCP server** — `mcp/draft-mcp.js`, registered in `~/.codex/config.toml` |
-| Commands | `/draft:*` skills | custom prompts in `~/.codex/prompts/` → `/prompts:draft-work`, `/prompts:draft-queue`, `/prompts:draft-refresh` |
+| Commands | `/foundry:*` skills | custom prompts in `~/.codex/prompts/` → `/prompts:foundry-work`, `/prompts:foundry-queue`, `/prompts:foundry-refresh` |
 | "Draft is connected" notice | `SessionStart` hook | no equivalent — an optional `~/.codex/AGENTS.md` snippet (see `AGENTS.snippet.md`) |
 
 The MCP server is byte-for-byte the same one the Claude Code plugin
@@ -56,6 +56,26 @@ Pin a version with `FOUNDRY_CODEX_VERSION=v0.1.0`, or uninstall with:
 ```bash
 curl -fsSL https://foundryworks.dev/install-codex.sh | sh -s -- --uninstall
 ```
+
+### Upgrading from the `draft-` prompts
+
+The prompts were `/prompts:draft-work`, `/prompts:draft-queue` and so on.
+They are now `/prompts:foundry-*`.
+
+Re-running the installer copies the new prompts in; nothing breaks while
+you have not. Because installing only ever *copies* files, your existing
+`~/.codex/prompts/draft-*.md` are left in place and keep working — they
+drive the same MCP tools, which still answer under both the `foundry` and
+`draft` server names. They will not receive further updates, though, so
+once you are using the `foundry-` prompts you can delete them:
+
+```bash
+rm ~/.codex/prompts/draft-{work,queue,refresh,agents}.md
+```
+
+Nothing else moved: `DRAFT_API_KEY` / `DRAFT_API_URL`, the
+`[mcp_servers.draft]` registration, and the `draft.foundryworks.dev` host
+are all still supported.
 
 ### From a clone (development)
 
@@ -146,17 +166,17 @@ at all is sent by a session already on `FOUNDRY_*` and `mcp__foundry__*`.
 
 After install + restart, in a Codex session:
 
-- **`/prompts:draft-queue`** — show the stories waiting in your agent
+- **`/prompts:foundry-queue`** — show the stories waiting in your agent
   queue (read-only).
-- **`/prompts:draft-work`** — work the queue: claim the top story,
+- **`/prompts:foundry-work`** — work the queue: claim the top story,
   implement it, and finish it. Pass `STORY=<number>` to pick up a
   specific story instead of the top of the queue.
-- **`/prompts:draft-refresh`** — re-fetch Draft's authoritative
+- **`/prompts:foundry-refresh`** — re-fetch Draft's authoritative
   operating instructions (the workspace context) from the API and adopt
   them as canonical for the rest of the session (read-only). Handy for a
   long-running session when the workflow rules may have changed
   server-side.
-- **`/prompts:draft-agents`** — pick an agent key from the **Foundry
+- **`/prompts:foundry-agents`** — pick an agent key from the **Foundry
   Agent Registry** instead of exporting one by hand. When the local
   `foundry daemon` is running and `FOUNDRY_API_KEY` is unset, this lists
   the keys in a table — a Cross-Project column (workspace-level agents)
@@ -192,9 +212,9 @@ The `draft` MCP server exposes:
 
 ```
 mcp/draft-mcp.js        zero-dependency MCP server wrapping the Draft API
-prompts/draft-work.md    /prompts:draft-work    — the ticket-working loop
-prompts/draft-queue.md   /prompts:draft-queue   — read-only queue view
-prompts/draft-refresh.md /prompts:draft-refresh — re-pull the workflow context
+prompts/foundry-work.md    /prompts:foundry-work    — the ticket-working loop
+prompts/foundry-queue.md   /prompts:foundry-queue   — read-only queue view
+prompts/foundry-refresh.md /prompts:foundry-refresh — re-pull the workflow context
 scripts/install.sh      copies prompts + wires up config.toml
 AGENTS.snippet.md       optional ~/.codex/AGENTS.md "Draft is connected" note
 ```
