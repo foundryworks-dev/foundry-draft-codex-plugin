@@ -85,7 +85,7 @@ If you'd rather wire it up yourself:
    [mcp_servers.draft]
    command = "node"
    args = ["/absolute/path/to/foundry-draft-codex-plugin/mcp/draft-mcp.js"]
-   env_vars = ["DRAFT_API_KEY", "DRAFT_API_URL"]
+   env_vars = ["FOUNDRY_API_KEY", "FOUNDRY_API_URL", "DRAFT_API_KEY", "DRAFT_API_URL"]
    ```
 
    `env_vars` forwards those variables from your shell environment, so
@@ -99,8 +99,13 @@ Set these in your shell profile. **Never commit the API key.**
 
 | Variable        | Required | Default                          | Purpose                                    |
 | --------------- | -------- | -------------------------------- | ------------------------------------------ |
-| `DRAFT_API_KEY` | yes      | —                                | Your workspace agent API key (`fdrk_…`).   |
-| `DRAFT_API_URL` | no       | `https://draft.foundryworks.dev` | Override for a self-hosted Draft instance. |
+| `FOUNDRY_API_KEY` | yes      | —                                | Your workspace agent API key (`fdrk_…`).   |
+| `FOUNDRY_API_URL` | no       | `https://draft.foundryworks.dev` | Override for a self-hosted Draft instance. |
+
+**The `DRAFT_API_KEY` / `DRAFT_API_URL` names are still accepted** and are
+not going away. `FOUNDRY_*` wins when both are set; otherwise `DRAFT_*` is
+used and the plugin prints a one-line notice on stderr. Existing setups need
+no change (#456).
 
 Get an API key from your Draft workspace under **Settings → Agents**.
 
@@ -120,11 +125,11 @@ After install + restart, in a Codex session:
   server-side.
 - **`/prompts:draft-agents`** — pick an agent key from the **Foundry
   Agent Registry** instead of exporting one by hand. When the local
-  `foundry daemon` is running and `DRAFT_API_KEY` is unset, this lists
+  `foundry daemon` is running and `FOUNDRY_API_KEY` is unset, this lists
   the keys in a table — a Cross-Project column (workspace-level agents)
   and a Project column (project-scoped agents), plus availability — you
   choose one, and the plugin claims it for the session via the
-  daemon. If `DRAFT_API_KEY` is already set, the registry flow is
+  daemon. If `FOUNDRY_API_KEY` is already set, the registry flow is
   skipped entirely. `install.sh` places the broker client at
   `~/.codex/scripts/foundry-registry.js`. (Codex has no session-end
   hook, so release the key with the broker's `release` when done — the

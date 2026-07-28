@@ -8,22 +8,53 @@
 // plugin can run it straight from source.
 //
 // Config (environment):
-//   DRAFT_API_KEY  required — workspace agent API key (fdrk_…)
-//   DRAFT_API_URL  optional — defaults to https://draft.foundryworks.dev
+//   FOUNDRY_API_KEY / DRAFT_API_KEY  required — workspace agent API key (fdrk_…)
+//   FOUNDRY_API_URL / DRAFT_API_URL  optional — defaults to
+//                                    https://draft.foundryworks.dev
 //
-// The server starts fine even without DRAFT_API_KEY; tool *calls*
-// then fail with a clear, actionable error, so `tools/list` stays
-// discoverable.
+// Foundry is a suite now, so the FOUNDRY_* names are the ones to reach
+// for. The DRAFT_* names keep working indefinitely (#456) — they're
+// exported in operator shells and baked into agent configs we don't
+// control, and a host redirect can't paper over an env var rename.
+//
+// The server starts fine even without a key; tool *calls* then fail
+// with a clear, actionable error, so `tools/list` stays discoverable.
 "use strict";
 
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const API_URL = (
-  process.env.DRAFT_API_URL || "https://draft.foundryworks.dev"
-).replace(/\/+$/, "");
-const API_KEY = process.env.DRAFT_API_KEY || "";
+// FOUNDRY_* wins → else the legacy DRAFT_* name → else the built-in
+// default. Tracks whether a legacy name actually supplied a value so we
+// can say so once (below) and, later, emit the retirement signal (#458).
+let legacyEnvName = "";
+function resolveEnv(suffix, fallback) {
+  const preferred = process.env[`FOUNDRY_${suffix}`];
+  if (preferred) return preferred;
+  const legacy = process.env[`DRAFT_${suffix}`];
+  if (legacy) {
+    legacyEnvName = legacyEnvName || `DRAFT_${suffix}`;
+    return legacy;
+  }
+  return fallback;
+}
+
+const API_URL = resolveEnv("API_URL", "https://draft.foundryworks.dev").replace(
+  /\/+$/,
+  "",
+);
+const API_KEY = resolveEnv("API_KEY", "");
+
+// Once per process, never per request (#456). It has to go to stderr:
+// stdout is the MCP JSON-RPC channel, and a stray line there corrupts
+// the stream for the client.
+if (legacyEnvName) {
+  process.stderr.write(
+    `notice: using ${legacyEnvName} (and any other DRAFT_* names). The ` +
+      `FOUNDRY_* equivalents are preferred; DRAFT_* keeps working.\n`,
+  );
+}
 
 const SERVER_INFO = { name: "draft", version: "0.6.0" };
 // Echoed back to the client when it doesn't send its own preferred
@@ -373,8 +404,9 @@ function modelHeaders() {
 async function api(method, path, body) {
   if (!API_KEY) {
     throw new Error(
-      "DRAFT_API_KEY is not set. Export your Foundry/Draft workspace " +
-        "agent API key (fdrk_…) before using the draft tools.",
+      "FOUNDRY_API_KEY is not set. Export your Foundry workspace agent " +
+        "API key (fdrk_…) before using the tools. (DRAFT_API_KEY is " +
+        "still accepted.)",
     );
   }
   const res = await fetch(API_URL + path, {
@@ -816,5 +848,5 @@ process.stdin.on("data", (chunk) => {
 
 process.stderr.write(
   `draft-mcp ${SERVER_INFO.version} ready — API ${API_URL}` +
-    (API_KEY ? "\n" : " (DRAFT_API_KEY not set)\n"),
+    (API_KEY ? "\n" : " (FOUNDRY_API_KEY not set)\n"),
 );

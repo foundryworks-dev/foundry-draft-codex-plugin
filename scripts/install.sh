@@ -52,8 +52,10 @@ else
 command = "node"
 args = ["$REPO_DIR/mcp/draft-mcp.js"]
 # Forward the agent credentials from your shell environment rather
-# than hard-coding the key into this file.
-env_vars = ["DRAFT_API_KEY", "DRAFT_API_URL"]
+# than hard-coding the key into this file. Both name pairs are listed so
+# an operator on either one keeps working — the server prefers FOUNDRY_*
+# and falls back to DRAFT_* (#456).
+env_vars = ["FOUNDRY_API_KEY", "FOUNDRY_API_URL", "DRAFT_API_KEY", "DRAFT_API_URL"]
 EOF
   echo "  ✓ added [mcp_servers.draft] → $CONFIG"
 fi
@@ -62,9 +64,11 @@ cat <<'EOF'
 
 Done. Next steps:
   • Export your workspace agent key in your shell profile:
-      export DRAFT_API_KEY=fdrk_...
-  • (Self-hosted Draft only) also export:
-      export DRAFT_API_URL=https://your-draft-host
+      export FOUNDRY_API_KEY=fdrk_...
+  • (Self-hosted Foundry only) also export:
+      export FOUNDRY_API_URL=https://your-foundry-host
+  • The legacy DRAFT_API_KEY / DRAFT_API_URL names still work if you
+    already have them exported — no need to change anything.
   • Restart Codex, then try:  /prompts:draft-queue
 
 Optional: see AGENTS.snippet.md for a one-paragraph note you can add
