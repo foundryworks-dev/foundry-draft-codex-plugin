@@ -81,7 +81,7 @@ function legacyHeaders() {
   return parts.length ? { "X-Foundry-Legacy": parts.join(",") } : {};
 }
 
-const SERVER_INFO = { name: "draft", version: "0.6.0" };
+const SERVER_INFO = { name: "draft", version: "0.8.0" };
 // Echoed back to the client when it doesn't send its own preferred
 // protocol version in `initialize`.
 const DEFAULT_PROTOCOL = "2025-06-18";
