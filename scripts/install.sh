@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Install the Foundry/Draft Codex integration:
 #
-#   1. copy the custom prompts into ~/.codex/prompts/
+#   1. copy the foundry-* skills into ~/.codex/skills/
 #   2. register the draft MCP server in ~/.codex/config.toml
 #
-# Both steps are idempotent — re-running refreshes the prompts and
+# Both steps are idempotent — re-running refreshes the skills and
 # leaves an existing [mcp_servers.draft] block untouched.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-PROMPTS_DIR="$CODEX_HOME/prompts"
+SKILLS_DIR="$CODEX_HOME/skills"
 CONFIG="$CODEX_HOME/config.toml"
 
 echo "Foundry/Draft Codex integration — installing into $CODEX_HOME"
@@ -18,7 +18,7 @@ echo "Foundry/Draft Codex integration — installing into $CODEX_HOME"
 # --- Node check (the MCP server needs Node 18+ for global fetch) ----
 if ! command -v node >/dev/null 2>&1; then
   echo "  ! Node is not on PATH. The MCP server needs Node 18+ — install it"
-  echo "    before using /prompts:foundry-work or /prompts:foundry-queue."
+  echo "    before using /foundry-work or /foundry-queue."
 else
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
   if [ "$major" -lt 18 ]; then
@@ -26,15 +26,32 @@ else
   fi
 fi
 
-# --- 1. prompts -----------------------------------------------------
-mkdir -p "$PROMPTS_DIR"
-cp "$REPO_DIR"/prompts/*.md "$PROMPTS_DIR/"
-echo "  ✓ copied prompts → $PROMPTS_DIR"
-echo "    (/prompts:foundry-work, /prompts:foundry-queue, /prompts:foundry-refresh, /prompts:foundry-agents)"
+# --- 1. skills ------------------------------------------------------
+# Codex reads skills from $CODEX_HOME/skills/<name>/SKILL.md. It does not
+# read a prompts/ directory at all — the mechanism this repo shipped until
+# #527 was silently inert on Codex 0.146+.
+mkdir -p "$SKILLS_DIR"
+for d in "$REPO_DIR"/skills/*/; do
+  [ -d "$d" ] || continue
+  rm -rf "$SKILLS_DIR/$(basename "$d")"
+  # ${d%/} strips the trailing slash — `cp -R dir/ dest/` copies the
+  # directory *contents* into dest, not the directory itself.
+  cp -R "${d%/}" "$SKILLS_DIR/"
+done
+echo "  ✓ copied skills → $SKILLS_DIR"
+echo "    (/foundry-work, /foundry-watch, /foundry-queue, /foundry-refresh, /foundry-agents)"
+
+# Clear the inert prompt files a pre-#527 checkout left behind, so a stale
+# copy can't look like a working install.
+for s in foundry-agents foundry-queue foundry-refresh foundry-watch foundry-work \
+         draft-agents draft-queue draft-refresh draft-watch draft-work; do
+  rm -f "$CODEX_HOME/prompts/$s.md"
+done
+rmdir "$CODEX_HOME/prompts" 2>/dev/null || true
 
 # --- 1b. registry broker client -------------------------------------
-# The draft-agents prompt shells out to this to talk to the local
-# Foundry Agent Registry daemon (#194). Prompts run from ~/.codex, so
+# The foundry-agents skill shells out to this to talk to the local
+# Foundry Agent Registry daemon (#194). Skills run from ~/.codex, so
 # the client is installed under $CODEX_HOME/scripts where they can find it.
 mkdir -p "$CODEX_HOME/scripts"
 cp "$REPO_DIR"/scripts/foundry-registry.js "$CODEX_HOME/scripts/"
@@ -120,7 +137,7 @@ Done. Next steps:
       export FOUNDRY_API_URL=https://your-foundry-host
   • The legacy DRAFT_API_KEY / DRAFT_API_URL names still work if you
     already have them exported — no need to change anything.
-  • Restart Codex, then try:  /prompts:foundry-queue
+  • Restart Codex, then try:  /foundry-queue
 
 Optional: see AGENTS.snippet.md for a one-paragraph note you can add
 to ~/.codex/AGENTS.md so Codex knows the Draft commands exist.

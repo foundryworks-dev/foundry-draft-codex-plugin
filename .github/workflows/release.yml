@@ -84,9 +84,14 @@ jobs:
         run: |
           mkdir -p dist
           # Archive only the runtime files the installer wires up. Paths land
-          # at the tarball root, so extraction yields mcp/, prompts/, scripts/.
+          # at the tarball root, so extraction yields mcp/, skills/, scripts/.
           tar -czf "dist/foundry-draft-codex-plugin.tar.gz" \
-            mcp prompts scripts AGENTS.snippet.md README.md LICENSE
+            mcp skills scripts AGENTS.snippet.md README.md LICENSE
+          # The installer errors out if skills/ is absent, but a tarball that
+          # silently shipped without it would still publish. Fail here instead.
+          tar -tzf "dist/foundry-draft-codex-plugin.tar.gz" \
+            | grep -q '^skills/foundry-watch/SKILL.md$' \
+            || { echo "::error::tarball is missing skills/ — packaging is wrong"; exit 1; }
           ls -l dist
 
       - name: Generate checksums

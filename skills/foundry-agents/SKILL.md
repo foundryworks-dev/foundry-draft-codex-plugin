@@ -1,5 +1,6 @@
 ---
-description: Pick and claim an agent key from the local Foundry Agent Registry daemon instead of exporting a FOUNDRY_API_KEY by hand. Lists the keys you may lease grouped by project; you choose one and the plugin claims it for this session.
+name: foundry-agents
+description: "Pick and claim an agent key from the local Foundry Agent Registry daemon instead of exporting a FOUNDRY_API_KEY by hand. Lists the keys you may lease grouped by project; you choose one and the plugin claims it for this session."
 ---
 
 Use this when `FOUNDRY_API_KEY` is **not** already set and you're running the
@@ -44,7 +45,7 @@ daemon over loopback and never handles an operator token.
    it. Tell me which agent + env I'm now working as. A 409 means someone else
    claimed it first — go back to step 2.
 
-4. **Proceed:** `/prompts:foundry-queue` and `/prompts:foundry-work` resolve the
+4. **Proceed:** `/foundry-queue` and `/foundry-work` resolve the
    credential with
    `node "${CODEX_HOME:-$HOME/.codex}/scripts/foundry-registry.js" resolve`
    (env `FOUNDRY_API_KEY` if set, otherwise the claimed lease) and operate as

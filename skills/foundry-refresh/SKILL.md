@@ -1,5 +1,6 @@
 ---
-description: Re-fetch Foundry/Draft's authoritative operating instructions (the workspace context) from the API and adopt them as canonical for the rest of the session.
+name: foundry-refresh
+description: "Re-fetch Foundry/Draft's authoritative operating instructions (the workspace context) from the API and adopt them as canonical for the rest of the session."
 ---
 
 Force a fresh pull of Draft's authoritative operating instructions from
@@ -16,7 +17,7 @@ it. Read-only: it claims, starts, and modifies nothing.
    notes straight from the API.
 2. Adopt the freshly returned text as canonical, replacing any earlier
    understanding from this session — including anything cached from a
-   previous `/prompts:foundry-work` or `/prompts:foundry-refresh` run. If
+   previous `/foundry-work` or `/foundry-refresh` run. If
    the new context conflicts with what you were doing, the new context
    wins.
 3. Briefly tell me what (if anything) changed since the context was last
@@ -24,4 +25,4 @@ it. Read-only: it claims, starts, and modifies nothing.
    an updated role description — or confirm it's unchanged.
 
 This does not start or continue working the queue. To do that, run
-`/prompts:foundry-work` (which loads the context itself before working).
+`/foundry-work` (which loads the context itself before working).
