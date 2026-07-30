@@ -1,0 +1,68 @@
+name: publish-installer
+
+# Publish install-codex.sh to the public R2 bucket so it is served at
+# https://dl.foundryworks.dev/install-codex.sh — the installer and the release
+# tarballs live together in one bucket, published by CI.
+#
+# Why this exists (#519): the served installer used to be a hand-maintained
+# copy in the marketing site's public/ directory. It drifted behind its own
+# release — still telling users to export DRAFT_API_KEY months after the
+# rename, and printing a prompt name that no longer shipped. Nothing detected
+# it; a user did.
+#
+# The registry solved this first and this mirrors its publish-installer.yml
+# exactly: the installer lives beside the thing it installs, CI publishes it on
+# every change, and there is no second copy to fall out of date. The registry's
+# served copy is byte-identical to its repo, which is the property we want here.
+#
+# Runs whenever install-codex.sh changes on main, and on demand. Deliberately
+# NOT tied to a tag: an installer fix should reach users without waiting for a
+# plugin release, and it downloads whatever latest.txt points at anyway.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'install-codex.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish install-codex.sh to R2
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same preflight as release.yml (#517): an unset secret interpolates to
+      # an empty string, so without this the job dies inside the AWS CLI on a
+      # URL with no hostname and names neither blank.
+      - name: Preflight — required secrets
+        run: |
+          missing=()
+          [ -n "${R2_BUCKET}" ]             || missing+=("R2_BUCKET")
+          [ -n "${R2_ACCOUNT_ID}" ]         || missing+=("R2_ACCOUNT_ID")
+          [ -n "${AWS_ACCESS_KEY_ID}" ]     || missing+=("R2_ACCESS_KEY_ID")
+          [ -n "${AWS_SECRET_ACCESS_KEY}" ] || missing+=("R2_SECRET_ACCESS_KEY")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing repository secrets: ${missing[*]}. Add them under" \
+                 "Settings → Secrets and variables → Actions. They are the same" \
+                 "four the foundry CLI release uses."
+            exit 1
+          fi
+
+      - name: Upload install-codex.sh to R2
+        run: |
+          aws s3 cp install-codex.sh "s3://${R2_BUCKET}/install-codex.sh" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --content-type text/x-shellscript \
+            --cache-control 'no-cache'
+          echo "Published to https://dl.foundryworks.dev/install-codex.sh"
