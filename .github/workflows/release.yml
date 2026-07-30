@@ -30,9 +30,55 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
       AWS_DEFAULT_REGION: auto
       R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      # Kept as its own variable as well as interpolated into R2_ENDPOINT so
+      # the preflight below can tell you *which* secret is missing. Interpolated
+      # alone, an unset account id just yields "https://.r2.cloudflarestorage.com".
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
       R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
     steps:
       - uses: actions/checkout@v4
+
+      # Fail here, by name, rather than 40 lines later inside the AWS CLI.
+      #
+      # An unset secret interpolates to an empty string, so the job used to run
+      # all the way to `aws s3 cp` and die with:
+      #
+      #   Publishing codex-plugin main to s3:///codex-plugin/main
+      #   aws: [ERROR]: Invalid endpoint: https://.r2.cloudflarestorage.com
+      #
+      # Both blanks are right there in the output and neither is named. That is
+      # the whole bug (#517): the secrets had never been added to this repo —
+      # they live on the `foundry` CLI repo, which this workflow was adapted
+      # from — and nothing said so.
+      - name: Preflight — required secrets and ref
+        run: |
+          missing=()
+          [ -n "${R2_BUCKET}" ]            || missing+=("R2_BUCKET")
+          [ -n "${R2_ACCOUNT_ID}" ]        || missing+=("R2_ACCOUNT_ID")
+          [ -n "${AWS_ACCESS_KEY_ID}" ]    || missing+=("R2_ACCESS_KEY_ID")
+          [ -n "${AWS_SECRET_ACCESS_KEY}" ] || missing+=("R2_SECRET_ACCESS_KEY")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::Missing repository secrets: ${missing[*]}. Add them under" \
+                 "Settings → Secrets and variables → Actions. They are the same" \
+                 "four the foundry CLI release uses."
+            exit 1
+          fi
+
+          # GITHUB_REF_NAME is the branch name when this is dispatched from a
+          # branch, so the failing run published to codex-plugin/main/ — "main"
+          # as a version. Dispatching against a *tag* still works, which is the
+          # case worth keeping: re-running a publish for an existing release.
+          case "${GITHUB_REF_NAME}" in
+            v*) ;;
+            *)
+              echo "::error::Refusing to publish '${GITHUB_REF_NAME}' as a version." \
+                   "Push a tag (git tag v0.1.0 && git push origin v0.1.0), or" \
+                   "dispatch this workflow against an existing tag."
+              exit 1
+              ;;
+          esac
+
+          echo "Publishing ${GITHUB_REF_NAME} to bucket ${R2_BUCKET}"
 
       - name: Package tarball
         run: |
