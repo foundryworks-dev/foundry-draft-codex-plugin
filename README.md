@@ -17,7 +17,7 @@ Codex home directory:
 | Piece | Claude Code | Codex |
 | --- | --- | --- |
 | API access | MCP server (bundled) | **same MCP server** — `mcp/draft-mcp.js`, registered in `~/.codex/config.toml` |
-| Commands | `/foundry:*` skills | custom prompts in `~/.codex/prompts/` → `/prompts:foundry-work`, `/prompts:foundry-queue`, `/prompts:foundry-refresh` |
+| Commands | `/foundry:*` skills | custom prompts in `~/.codex/prompts/` → `/prompts:foundry-work`, `/prompts:foundry-watch`, `/prompts:foundry-queue`, `/prompts:foundry-refresh` |
 | "Draft is connected" notice | `SessionStart` hook | no equivalent — an optional `~/.codex/AGENTS.md` snippet (see `AGENTS.snippet.md`) |
 
 The MCP server is byte-for-byte the same one the Claude Code plugin
@@ -171,6 +171,10 @@ After install + restart, in a Codex session:
 - **`/prompts:foundry-work`** — work the queue: claim the top story,
   implement it, and finish it. Pass `STORY=<number>` to pick up a
   specific story instead of the top of the queue.
+- **`/prompts:foundry-watch`** — the same loop, but an empty queue means
+  wait and re-check rather than stop. Start it once and leave it: it
+  polls until you interrupt. Pass a number of seconds to change the
+  interval (default 300).
 - **`/prompts:foundry-refresh`** — re-fetch Draft's authoritative
   operating instructions (the workspace context) from the API and adopt
   them as canonical for the rest of the session (read-only). Handy for a
@@ -213,6 +217,7 @@ The `draft` MCP server exposes:
 ```
 mcp/draft-mcp.js        zero-dependency MCP server wrapping the Draft API
 prompts/foundry-work.md    /prompts:foundry-work    — the ticket-working loop
+prompts/foundry-watch.md   /prompts:foundry-watch   — the loop, but it keeps polling
 prompts/foundry-queue.md   /prompts:foundry-queue   — read-only queue view
 prompts/foundry-refresh.md /prompts:foundry-refresh — re-pull the workflow context
 scripts/install.sh      copies prompts + wires up config.toml

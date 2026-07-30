@@ -18,7 +18,8 @@ every repo. Keep it short for that reason, or skip it and just invoke
 If `FOUNDRY_API_KEY` is set in the environment, this machine is wired to
 a Foundry/Draft workspace. To see the agent work queue, run
 `/prompts:foundry-queue`. To start working tickets from it, run
-`/prompts:foundry-work`. To re-pull the latest workflow instructions
+`/prompts:foundry-work`, or `/prompts:foundry-watch` to keep working as
+new tickets arrive. To re-pull the latest workflow instructions
 mid-session, run `/prompts:foundry-refresh`. If `FOUNDRY_API_KEY` is *not*
 set but a Foundry Agent Registry daemon is running, run
 `/prompts:foundry-agents` to pick and claim a key from the registry
