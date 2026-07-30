@@ -1,7 +1,7 @@
 #!/bin/sh
 # Foundry/Draft Codex plugin installer (#419).
 #
-#   curl -fsSL https://foundryworks.dev/install-codex.sh | sh
+#   curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh
 #
 # Codex has no plugin marketplace (unlike Claude Code), so this script is the
 # Codex equivalent of "/plugin install": it fetches a versioned, SHA-256-
@@ -18,7 +18,7 @@
 #   6. install the /prompts:draft-* prompts + the registry broker client
 #
 # Re-running upgrades in place (idempotent, non-destructive). Uninstall with:
-#   curl -fsSL https://foundryworks.dev/install-codex.sh | sh -s -- --uninstall
+#   curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh -s -- --uninstall
 #
 # Environment overrides:
 #   FOUNDRY_CODEX_VERSION       version to install (default: latest). "v0.1.0" or "0.1.0".
@@ -212,7 +212,7 @@ main() {
     info "  • The legacy DRAFT_API_KEY / DRAFT_API_URL names still work if you"
     info "    already have them exported — no need to change anything."
     info "  • Restart Codex, then try:  /prompts:foundry-queue"
-    info "  • Uninstall:  curl -fsSL https://foundryworks.dev/install-codex.sh | sh -s -- --uninstall"
+    info "  • Uninstall:  curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh -s -- --uninstall"
 }
 
 main "$@"

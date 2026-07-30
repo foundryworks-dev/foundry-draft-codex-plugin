@@ -39,7 +39,7 @@ copied into this repo; it may be extracted to a shared package later.)
 ## Install
 
 ```bash
-curl -fsSL https://foundryworks.dev/install-codex.sh | sh
+curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh
 ```
 
 That's the Codex equivalent of "/plugin install": it fetches a
@@ -54,7 +54,7 @@ client go into `~/.codex/prompts/` and `~/.codex/scripts/`.
 Pin a version with `FOUNDRY_CODEX_VERSION=v0.1.0`, or uninstall with:
 
 ```bash
-curl -fsSL https://foundryworks.dev/install-codex.sh | sh -s -- --uninstall
+curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh -s -- --uninstall
 ```
 
 ### Upgrading from the `draft-` prompts
