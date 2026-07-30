@@ -89,151 +89,170 @@ const DEFAULT_PROTOCOL = "2025-06-18";
 // ---------------------------------------------------- token tracking (#135)
 //
 // Auto-record how many LLM tokens the agent spent on each story by
-// snapshotting the cumulative-token count at claim time and PATCHing
-// the diff to `agent_tokens_used` on the finish transition. The
-// snapshot lives in a small per-session JSON file under
-// ~/.claude/foundry-draft-plugin/ so the bookkeeping survives
-// multiple tool calls within a session and stays isolated when
-// several Claude Code sessions run in parallel.
+// snapshotting the cumulative-token count at claim time and PATCHing the diff
+// to `agent_tokens_used` on the finish transition.
 //
-// Robust to running outside Claude Code: if there's no transcript
-// to read, every step short-circuits to a no-op (no snapshot, no
-// PATCH at finish), and the rest of the plugin keeps working.
+// This file began as a copy of the Claude Code plugin's server and kept
+// reading Claude's transcripts: it keyed off CLAUDE_CODE_SESSION_ID and walked
+// ~/.claude/projects/. Under Codex that variable is never set, so it either
+// found nothing and silently reported zero, or — in a directory Claude Code
+// had also worked in — resolved a *Claude* transcript and attributed that
+// spend to a Codex story (#514 measured 646M tokens attributed that way).
 //
-// Restart caveat (accepted in the story discussion): if the agent
-// process is killed mid-story and a fresh session resumes, the
-// snapshot file is keyed by the OLD session id; the new session
-// can't see it. We re-snapshot on the spot at finish and just
-// report what the current session contributed. Under-reports
-// rather than mis-reports.
+// Codex records its own usage, so nothing was missing but the reader (#515):
+//
+//   $CODEX_HOME/sessions/YYYY/MM/DD/rollout-<timestamp>-<session-id>.jsonl
+//
+//   line 0   {"type":"session_meta","payload":{"session_id":…,"cwd":…}}
+//   usage    {"type":"event_msg","payload":{"type":"token_count",
+//              "info":{"total_token_usage":{…}}}}
+//
+// Nothing below looks at ~/.claude any more, which is what makes the
+// mis-attribution structurally impossible rather than merely unlikely.
+//
+// Robust to running outside Codex: with no rollout to read, every step
+// short-circuits to a no-op and the rest of the plugin keeps working.
+//
+// Restart caveat (unchanged): if the agent process is killed mid-story and a
+// fresh session resumes, the snapshot file is keyed by the OLD session id and
+// the new session can't see it. We re-snapshot at finish and report what the
+// current session contributed — under-reports rather than mis-reports.
 
-const STATE_DIR = path.join(
-  os.homedir(),
-  ".claude",
-  "foundry-draft-plugin",
-);
+const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 
-// Transcript files live at:
-//   ~/.claude/projects/<encoded-cwd>/<session-id>.jsonl
-// where <encoded-cwd> is the absolute working directory with every
-// "/" replaced by "-". Claude Code writes one assistant-message row
-// per line, with a `message.usage` object on each one.
-function transcriptDirForCwd(cwd) {
-  return path.join(
-    os.homedir(),
-    ".claude",
-    "projects",
-    cwd.replace(/\//g, "-"),
-  );
+const STATE_DIR = path.join(CODEX_HOME, "foundry-draft-plugin");
+
+const SESSIONS_DIR = path.join(CODEX_HOME, "sessions");
+
+// Rollout files, newest first.
+//
+// Codex nests them by date (YYYY/MM/DD), so descending newest-directory-first
+// means the session we want is normally in the first directory opened. Bounded
+// rather than exhaustive: a machine with years of history shouldn't pay for a
+// full walk on every claim.
+function recentRolloutFiles(limit = 200) {
+  const out = [];
+  const descend = (dir, depth) => {
+    if (out.length >= limit) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    if (depth < 3) {
+      const dirs = entries
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name)
+        .sort()
+        .reverse();
+      for (const d of dirs) descend(path.join(dir, d), depth + 1);
+      return;
+    }
+    const files = entries
+      .filter((e) => e.isFile() && e.name.endsWith(".jsonl"))
+      .map((e) => {
+        const full = path.join(dir, e.name);
+        let mtime = 0;
+        try {
+          mtime = fs.statSync(full).mtimeMs;
+        } catch {
+          /* raced with a delete — skip it */
+        }
+        return { path: full, mtime };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    for (const f of files) {
+      if (out.length >= limit) return;
+      out.push(f);
+    }
+  };
+  descend(SESSIONS_DIR, 0);
+  return out;
 }
 
-// Identify the transcript for the session that invoked us. Claude Code
-// sets CLAUDE_CODE_SESSION_ID in the MCP subprocess's environment and
-// writes that session's transcript to <session-id>.jsonl, so we resolve
-// that exact file. The old approach — "the most-recently-modified
-// .jsonl in the cwd-derived dir" — mis-fires whenever a stale or
-// concurrent transcript is newer than the active one (or the active
-// transcript lives under a dir that doesn't match process.cwd()): claim
-// and finish then read the same wrong file, the diff is ~0, and the
-// story records 0 tokens (#248). We only fall back to that heuristic
-// when the env var is absent (older Claude Code / non-Claude hosts).
-// Returns null when nothing resolves (e.g. running outside Claude Code).
-function currentSession() {
-  const sessionId = process.env.CLAUDE_CODE_SESSION_ID;
-  if (sessionId) {
-    // Prefer the transcript under the cwd-derived dir, then search all
-    // project dirs (covers a cwd that doesn't match the launch dir,
-    // e.g. git worktrees). If the env var is set but no transcript is
-    // found, return null rather than guessing a wrong file — under-
-    // reporting beats mis-reporting.
-    const direct = path.join(
-      transcriptDirForCwd(process.cwd()),
-      `${sessionId}.jsonl`,
-    );
-    if (isFile(direct)) return { sessionId, path: direct };
-    return findTranscriptById(sessionId);
-  }
-  return mostRecentSession();
-}
-
-function isFile(p) {
+// Read a rollout's session_meta without parsing the whole file — it is line 0,
+// and these files reach megabytes.
+function rolloutMeta(file) {
+  let fd;
   try {
-    return fs.statSync(p).isFile();
+    fd = fs.openSync(file, "r");
+    const buf = Buffer.alloc(64 * 1024);
+    const read = fs.readSync(fd, buf, 0, buf.length, 0);
+    const firstLine = buf.subarray(0, read).toString("utf8").split("\n")[0];
+    const row = JSON.parse(firstLine);
+    if (row && row.type === "session_meta" && row.payload) {
+      return { sessionId: row.payload.session_id, cwd: row.payload.cwd };
+    }
   } catch {
-    return false;
-  }
-}
-
-// Search every ~/.claude/projects/<encoded-cwd>/ dir for <id>.jsonl.
-// Used when the active transcript isn't under the dir process.cwd()
-// encodes to (e.g. the agent launched from a git worktree).
-function findTranscriptById(sessionId) {
-  const projectsDir = path.join(os.homedir(), ".claude", "projects");
-  let dirs;
-  try {
-    dirs = fs.readdirSync(projectsDir);
-  } catch {
-    return null;
-  }
-  for (const d of dirs) {
-    const candidate = path.join(projectsDir, d, `${sessionId}.jsonl`);
-    if (isFile(candidate)) return { sessionId, path: candidate };
+    /* truncated, mid-write, or not a rollout — treat as unusable */
+  } finally {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        /* nothing useful to do */
+      }
+    }
   }
   return null;
 }
 
-// Legacy fallback: pick the most-recently-modified .jsonl in the
-// cwd-derived transcript dir. Only used when CLAUDE_CODE_SESSION_ID is
-// unavailable. Returns null when there's nothing to read.
-function mostRecentSession() {
-  let entries;
-  try {
-    entries = fs.readdirSync(transcriptDirForCwd(process.cwd()));
-  } catch {
-    return null;
+// Identify the rollout for the session that invoked us.
+//
+// Codex forwards only the environment variables named in the `env_vars`
+// allowlist of its MCP config, so there is no session-id variable to key off
+// the way CLAUDE_CODE_SESSION_ID worked on the Claude host. We match the
+// working directory the session recorded instead, newest first, and fall back
+// to the newest rollout overall when nothing matches — a Codex session started
+// elsewhere is still a Codex session, and the alternative is reporting nothing.
+//
+// Both paths stay inside CODEX_HOME. That is the point: the previous version's
+// fallback reached into ~/.claude and could return another tool's transcript.
+function currentSession() {
+  const cwd = process.cwd();
+  const files = recentRolloutFiles();
+  let newest = null;
+  for (const f of files) {
+    const meta = rolloutMeta(f.path);
+    if (!meta || !meta.sessionId) continue;
+    if (!newest) newest = { sessionId: meta.sessionId, path: f.path };
+    if (meta.cwd === cwd) return { sessionId: meta.sessionId, path: f.path };
   }
-  let best = null;
-  let bestMtime = -1;
-  for (const name of entries) {
-    if (!name.endsWith(".jsonl")) continue;
-    const full = path.join(transcriptDirForCwd(process.cwd()), name);
-    let stat;
-    try {
-      stat = fs.statSync(full);
-    } catch {
-      continue;
-    }
-    if (stat.mtimeMs > bestMtime) {
-      bestMtime = stat.mtimeMs;
-      best = { sessionId: name.slice(0, -".jsonl".length), path: full };
-    }
-  }
-  return best;
+  return newest;
 }
 
-// Sum each token category across every row in the transcript that
-// carries a usage object. Returns a snapshot of cumulative session
-// spend split by type, plus the aggregate. Including cache_read
-// keeps the aggregate monotonically matching the "size of work"
-// figure billing would show, even though cache_read is functionally
-// free per call.
+// The session's spend by category, from its newest token_count event.
 //
-// Tolerant of partial / in-flight writes: a malformed trailing line
-// is skipped silently. Returns null when the file can't be read at
-// all.
-function readTokenSnapshot(transcriptPath) {
+// Codex's total_token_usage is already cumulative for the session, so this
+// reads the LAST such row rather than summing every row. Summing would add
+// each turn's running total again and inflate the figure roughly with the
+// square of the turn count.
+//
+// The mapping is where this is easy to get wrong. cached_input_tokens is a
+// SUBSET of input_tokens (and reasoning_output_tokens a subset of
+// output_tokens), with
+//
+//     total_tokens == input_tokens + output_tokens
+//
+// so mapping input_tokens onto agent_input_tokens while also mapping
+// cached_input_tokens onto agent_cache_read_tokens counts the cached portion
+// twice. Subtracting it keeps the four typed fields summing to the aggregate,
+// which is the invariant the Token Usage screen renders against.
+//
+// Codex reports no cache-creation figure, so that category stays 0 rather than
+// being invented.
+//
+// Tolerant of partial writes: a malformed line is skipped. Returns null when
+// the file carries no usage rows at all.
+function readTokenSnapshot(rolloutPath) {
   let data;
   try {
-    data = fs.readFileSync(transcriptPath, "utf8");
+    data = fs.readFileSync(rolloutPath, "utf8");
   } catch {
     return null;
   }
-  const snap = {
-    input: 0,
-    output: 0,
-    cache_read: 0,
-    cache_creation: 0,
-  };
+  let usage = null;
   for (const line of data.split("\n")) {
     if (!line.trim()) continue;
     let row;
@@ -242,14 +261,26 @@ function readTokenSnapshot(transcriptPath) {
     } catch {
       continue;
     }
-    const u = row && row.message && row.message.usage;
-    if (!u) continue;
-    snap.input += u.input_tokens || 0;
-    snap.output += u.output_tokens || 0;
-    snap.cache_read += u.cache_read_input_tokens || 0;
-    snap.cache_creation += u.cache_creation_input_tokens || 0;
+    const p = row && row.payload;
+    if (!p || p.type !== "token_count") continue;
+    const u = p.info && p.info.total_token_usage;
+    if (u) usage = u;
   }
+  if (!usage) return null;
+
+  const input = usage.input_tokens || 0;
+  const cached = usage.cached_input_tokens || 0;
+  const snap = {
+    input: Math.max(0, input - cached),
+    output: usage.output_tokens || 0,
+    cache_read: cached,
+    cache_creation: 0,
+  };
+  // Prefer Codex's own total when present; it agrees with the parts above by
+  // construction, and trusting it means a field we don't map yet still lands
+  // in the aggregate.
   snap.total =
+    usage.total_tokens ||
     snap.input + snap.output + snap.cache_read + snap.cache_creation;
   return snap;
 }
