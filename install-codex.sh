@@ -15,7 +15,7 @@
 #   3. download + verify the plugin tarball against SHA256SUMS
 #   4. extract to ~/.foundry/codex-draft-plugin/<version> + a `current` symlink
 #   5. wire ~/.codex/config.toml [mcp_servers.draft] inside a marked block
-#   6. install the /prompts:draft-* prompts + the registry broker client
+#   6. install the /prompts:foundry-* prompts + the registry broker client
 #
 # Re-running upgrades in place (idempotent, non-destructive). Uninstall with:
 #   curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh -s -- --uninstall
@@ -84,7 +84,7 @@ check_prereqs() {
     [ "$major" -ge 18 ] \
         || err "Node $(node -v 2>/dev/null) is too old — the MCP server needs Node 18+ (global fetch)."
     command -v codex >/dev/null 2>&1 \
-        || info "note: 'codex' is not on your PATH — install the Codex CLI to use the /prompts:draft-* commands."
+        || info "note: 'codex' is not on your PATH — install the Codex CLI to use the /prompts:foundry-* commands."
 }
 
 # ---- config.toml block management -------------------------------------------
@@ -128,7 +128,25 @@ EOF
 uninstall() {
     info "uninstalling $PLUGIN"
     strip_managed_block && info "removed [mcp_servers.draft] block from $CONFIG"
-    for f in draft-agents.md draft-queue.md draft-refresh.md draft-work.md; do
+    # Remove exactly what was installed, by reading the install tree rather
+    # than a list maintained here. install does `cp "$dest"/prompts/*.md` — a
+    # glob — so any hard-coded list on this side is a copy of the manifest that
+    # drifts the moment a prompt is added. It already had: the tarball ships
+    # five prompts, and every hard-coded list ever written here named four.
+    if [ -d "${INSTALL_ROOT}/current/prompts" ]; then
+        for f in "${INSTALL_ROOT}/current/prompts"/*.md; do
+            [ -e "$f" ] || continue
+            rm -f "$CODEX_HOME/prompts/$(basename "$f")"
+        done
+    fi
+    # Plus both naming generations explicitly, which the install tree cannot
+    # tell us about: #476 renamed the prompts to the foundry- namespace, and
+    # install has only ever *copied*, never removed the old names — so a
+    # long-standing user has draft-* on disk that no current tarball contains.
+    # This also covers an install tree already deleted by hand.
+    for f in foundry-agents.md foundry-queue.md foundry-refresh.md \
+             foundry-watch.md foundry-work.md \
+             draft-agents.md draft-queue.md draft-refresh.md draft-work.md; do
         rm -f "$CODEX_HOME/prompts/$f"
     done
     rm -f "$CODEX_HOME/scripts/foundry-registry.js"
