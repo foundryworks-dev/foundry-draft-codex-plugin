@@ -1,12 +1,12 @@
 ---
 name: foundry-watch
-description: "Work the Foundry/Draft agent queue and keep polling when it empties \u2014 the \"set it and forget it\" variant of /foundry-work. Start it once, walk away, come back to delivered stories. Optional argument: INTERVAL_SECONDS."
+description: "Work the Foundry/Draft agent queue and keep polling when it empties — the \"set it and forget it\" variant of $foundry-work. Start it once, walk away, come back to delivered stories. Optional argument: INTERVAL_SECONDS."
 ---
 
 Run the Foundry/Draft agent loop and **keep running it**, using the
 tools from the `draft` MCP server.
 
-Same as `/foundry-work`, except that an empty queue is not the
+Same as `$foundry-work`, except that an empty queue is not the
 end: sleep, re-check, and pick up whatever arrives. Use this when I
 want to leave you working unattended for a stretch. The only thing
 that ends the loop is me interrupting it.
@@ -17,10 +17,10 @@ The MCP server reads its config from the environment:
 
 - `FOUNDRY_API_KEY` — the workspace agent API key. If it's not set in the
   environment, resolve it from the registry:
-  `node "${CODEX_HOME:-$HOME/.codex}/scripts/foundry-registry.js" resolve`
+  `node "${CODEX_HOME:-$HOME/.codex}/scripts$foundry-registry.js" resolve`
   prints `FOUNDRY_API_KEY<TAB>FOUNDRY_API_URL` (env if set, else a lease
-  claimed via `/foundry-agents`) — use it over REST. If that exits
-  non-zero, tell me to run `/foundry-agents` or export
+  claimed via `$foundry-agents`) — use it over REST. If that exits
+  non-zero, tell me to run `$foundry-agents` or export
   `FOUNDRY_API_KEY`, and stop.
 - `FOUNDRY_API_URL` (optional) — defaults to
   `https://app.foundryworks.dev`.
