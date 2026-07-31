@@ -84,7 +84,7 @@ check_prereqs() {
     [ "$major" -ge 18 ] \
         || err "Node $(node -v 2>/dev/null) is too old — the MCP server needs Node 18+ (global fetch)."
     command -v codex >/dev/null 2>&1 \
-        || info "note: 'codex' is not on your PATH — install the Codex CLI to use the /foundry-* skills."
+        || info "note: 'codex' is not on your PATH — install the Codex CLI to use the \$foundry-* skills."
 }
 
 # ---- config.toml block management -------------------------------------------
@@ -253,7 +253,7 @@ main() {
     info "    (self-hosted Foundry only) also: export FOUNDRY_API_URL=https://your-foundry-host"
     info "  • The legacy DRAFT_API_KEY / DRAFT_API_URL names still work if you"
     info "    already have them exported — no need to change anything."
-    info "  • Restart Codex, then try:  /foundry-queue"
+    info "  • Restart Codex, then try:  \$foundry-queue"
     info "  • Uninstall:  curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh -s -- --uninstall"
 }
 

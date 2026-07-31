@@ -18,7 +18,7 @@ echo "Foundry/Draft Codex integration — installing into $CODEX_HOME"
 # --- Node check (the MCP server needs Node 18+ for global fetch) ----
 if ! command -v node >/dev/null 2>&1; then
   echo "  ! Node is not on PATH. The MCP server needs Node 18+ — install it"
-  echo "    before using /foundry-work or /foundry-queue."
+  echo "    before using \$foundry-work or \$foundry-queue."
 else
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
   if [ "$major" -lt 18 ]; then
@@ -39,7 +39,7 @@ for d in "$REPO_DIR"/skills/*/; do
   cp -R "${d%/}" "$SKILLS_DIR/"
 done
 echo "  ✓ copied skills → $SKILLS_DIR"
-echo "    (/foundry-work, /foundry-watch, /foundry-queue, /foundry-refresh, /foundry-agents)"
+echo "    (\$foundry-work, \$foundry-watch, \$foundry-queue, \$foundry-refresh, \$foundry-agents)"
 
 # Clear the inert prompt files a pre-#527 checkout left behind, so a stale
 # copy can't look like a working install.
@@ -137,7 +137,7 @@ Done. Next steps:
       export FOUNDRY_API_URL=https://your-foundry-host
   • The legacy DRAFT_API_KEY / DRAFT_API_URL names still work if you
     already have them exported — no need to change anything.
-  • Restart Codex, then try:  /foundry-queue
+  • Restart Codex, then try:  $foundry-queue
 
 Optional: see AGENTS.snippet.md for a one-paragraph note you can add
 to ~/.codex/AGENTS.md so Codex knows the Draft commands exist.

@@ -17,7 +17,7 @@ Codex home directory:
 | Piece | Claude Code | Codex |
 | --- | --- | --- |
 | API access | MCP server (bundled) | **same MCP server** — `mcp/draft-mcp.js`, registered in `~/.codex/config.toml` |
-| Commands | `/foundry-*` skills | skills in `~/.codex/skills/` → `/foundry-work`, `/foundry-watch`, `/foundry-queue`, `/foundry-refresh` |
+| Commands | plugin slash commands → `/foundry:work`, `/foundry:watch`, … | skills in `~/.codex/skills/`, invoked by `$` mention → `$foundry-work`, `$foundry-watch`, `$foundry-queue`, `$foundry-refresh`, `$foundry-agents` |
 | "Draft is connected" notice | `SessionStart` hook | no equivalent — an optional `~/.codex/AGENTS.md` snippet (see `AGENTS.snippet.md`) |
 
 The MCP server is byte-for-byte the same one the Claude Code plugin
@@ -62,7 +62,7 @@ curl -fsSL https://dl.foundryworks.dev/install-codex.sh | sh -s -- --uninstall
 The prompts were `/prompts:draft-work`, `/prompts:draft-queue` and so on.
 They were renamed to `foundry-*` by #476, and became **skills** in #527 —
 Codex stopped reading `~/.codex/prompts` entirely, so they are now
-`/foundry-*`.
+`$foundry-*`.
 
 Re-running the installer copies the new skills in and removes the old
 prompt files, which no longer do anything: as of #527 Codex reads
@@ -102,7 +102,7 @@ step.
 
 If you'd rather wire it up yourself:
 
-1. Copy each `skills/foundry-*/` directory into `~/.codex/skills/`.
+1. Copy each `skills$foundry-*/` directory into `~/.codex/skills/`.
 2. Add this to `~/.codex/config.toml` (use the absolute path to your
    clone):
 
@@ -169,23 +169,30 @@ at all is sent by a session already on `FOUNDRY_*` and `mcp__foundry__*`.
 
 ## Use
 
-After install + restart, in a Codex session:
+After install + restart, in a Codex session.
 
-- **`/foundry-queue`** — show the stories waiting in your agent
+> **These are skills, not slash commands.** Mention one with a `$`
+> sigil anywhere in your message — `$foundry-queue` — and Codex loads
+> its instructions. Typing `/foundry-queue` does **nothing**, and Codex
+> reports no error, so it reads as a broken install rather than the
+> wrong sigil. The slash form belongs to the Claude Code plugin, where
+> commands are namespaced under the plugin (`/foundry:queue`).
+
+- **`$foundry-queue`** — show the stories waiting in your agent
   queue (read-only).
-- **`/foundry-work`** — work the queue: claim the top story,
+- **`$foundry-work`** — work the queue: claim the top story,
   implement it, and finish it. Pass `STORY=<number>` to pick up a
   specific story instead of the top of the queue.
-- **`/foundry-watch`** — the same loop, but an empty queue means
+- **`$foundry-watch`** — the same loop, but an empty queue means
   wait and re-check rather than stop. Start it once and leave it: it
   polls until you interrupt. Pass a number of seconds to change the
   interval (default 300).
-- **`/foundry-refresh`** — re-fetch Draft's authoritative
+- **`$foundry-refresh`** — re-fetch Draft's authoritative
   operating instructions (the workspace context) from the API and adopt
   them as canonical for the rest of the session (read-only). Handy for a
   long-running session when the workflow rules may have changed
   server-side.
-- **`/foundry-agents`** — pick an agent key from the **Foundry
+- **`$foundry-agents`** — pick an agent key from the **Foundry
   Agent Registry** instead of exporting one by hand. When the local
   `foundry daemon` is running and `FOUNDRY_API_KEY` is unset, this lists
   the keys in a table — a Cross-Project column (workspace-level agents)
@@ -221,10 +228,10 @@ The `draft` MCP server exposes:
 
 ```
 mcp/draft-mcp.js        zero-dependency MCP server wrapping the Draft API
-skills/foundry-work/SKILL.md    /foundry-work    — the ticket-working loop
-skills/foundry-watch/SKILL.md   /foundry-watch   — the loop, but it keeps polling
-skills/foundry-queue/SKILL.md   /foundry-queue   — read-only queue view
-skills/foundry-refresh/SKILL.md /foundry-refresh — re-pull the workflow context
+skills$foundry-work/SKILL.md    $foundry-work    — the ticket-working loop
+skills$foundry-watch/SKILL.md   $foundry-watch   — the loop, but it keeps polling
+skills$foundry-queue/SKILL.md   $foundry-queue   — read-only queue view
+skills$foundry-refresh/SKILL.md $foundry-refresh — re-pull the workflow context
 scripts/install.sh      copies prompts + wires up config.toml
 AGENTS.snippet.md       optional ~/.codex/AGENTS.md "Draft is connected" note
 ```

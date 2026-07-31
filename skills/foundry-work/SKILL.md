@@ -1,6 +1,6 @@
 ---
 name: foundry-work
-description: "Work the Foundry/Draft agent queue \u2014 fetch the workflow context, claim the top story, implement it, and finish it. Optional argument: STORY=number."
+description: "Work the Foundry/Draft agent queue — fetch the workflow context, claim the top story, implement it, and finish it. Optional argument: STORY=number."
 ---
 
 Run the Foundry/Draft agent loop, using the tools from the `draft`
@@ -12,10 +12,10 @@ The MCP server reads its config from the environment:
 
 - `FOUNDRY_API_KEY` — the workspace agent API key. If it's not set in the
   environment, resolve it from the registry:
-  `node "${CODEX_HOME:-$HOME/.codex}/scripts/foundry-registry.js" resolve`
+  `node "${CODEX_HOME:-$HOME/.codex}/scripts$foundry-registry.js" resolve`
   prints `FOUNDRY_API_KEY<TAB>FOUNDRY_API_URL` (env if set, else a lease
-  claimed via `/foundry-agents`) — use it over REST. If that exits
-  non-zero, tell me to run `/foundry-agents` or export
+  claimed via `$foundry-agents`) — use it over REST. If that exits
+  non-zero, tell me to run `$foundry-agents` or export
   `FOUNDRY_API_KEY`, and stop.
 - `FOUNDRY_API_URL` (optional) — defaults to
   `https://app.foundryworks.dev`.
