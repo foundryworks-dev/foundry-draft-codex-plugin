@@ -410,6 +410,24 @@ async function patchTokensUsedAtFinish(projectId, number) {
 let modelCache = null; // { model, version, at }
 const MODEL_TTL_MS = 30000;
 
+// Codex records the live model on its own rows, NOT as `message.model`
+// (#554). That field is Claude Code's shape, and reading for it here was a
+// silent no-op: currentSession() had already been made Codex-native by #515,
+// so this opened the correct rollout, searched it for a key Codex never
+// writes, returned "", and modelHeaders() then correctly omitted the header.
+// Right file, wrong field — which looks like working code at every level a
+// reviewer reads, and reports nothing.
+//
+// Where the model actually lives, measured across six rollouts spanning two
+// weeks on a real machine (every one carried both):
+//
+//   {"type":"turn_context","payload":{"model":"gpt-5.6-sol", …}}
+//   {"type":"world_state","payload":{"state":{"model":"gpt-5.6-sol", …}}}
+//
+// turn_context is preferred and read last-wins, so a model switched
+// mid-session is attributed to the model in force when the spend happened
+// rather than to whatever the session opened with. world_state is a fallback
+// for a rollout that somehow carries no turn_context.
 function readModelFromTranscript() {
   const sess = currentSession();
   if (!sess || !sess.path) return "";
@@ -419,7 +437,8 @@ function readModelFromTranscript() {
   } catch {
     return "";
   }
-  let model = "";
+  let turnModel = "";
+  let stateModel = "";
   for (const line of data.split("\n")) {
     if (!line.trim()) continue;
     let row;
@@ -428,11 +447,15 @@ function readModelFromTranscript() {
     } catch {
       continue;
     }
-    const m = row && row.message && row.message.model;
-    // Skip Claude Code's synthetic placeholder rows.
-    if (m && m !== "<synthetic>") model = m;
+    if (!row || !row.payload) continue;
+    if (row.type === "turn_context" && typeof row.payload.model === "string") {
+      if (row.payload.model) turnModel = row.payload.model;
+    } else if (row.type === "world_state" && row.payload.state) {
+      const m = row.payload.state.model;
+      if (typeof m === "string" && m) stateModel = m;
+    }
   }
-  return model;
+  return turnModel || stateModel;
 }
 
 // { model, version } for the current agent, or empty model when unknown.
@@ -873,37 +896,50 @@ async function handle(msg) {
   }
 }
 
-// Newline-delimited JSON on stdin. Buffer across chunks so a message
-// split over two reads still parses.
-let buf = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => {
-  buf += chunk;
-  let nl;
-  while ((nl = buf.indexOf("\n")) >= 0) {
-    const line = buf.slice(0, nl).trim();
-    buf = buf.slice(nl + 1);
-    if (!line) continue;
-    let msg;
-    try {
-      msg = JSON.parse(line);
-    } catch (e) {
-      process.stderr.write("draft-mcp: bad JSON on stdin: " + e.message + "\n");
-      continue;
+// Requiring this file exports the model resolver instead of starting the
+// server (#554). The bug this file just carried — reading the correct rollout
+// for a field Codex never writes — was invisible precisely because nothing
+// could call the resolver without standing up an MCP session, so "the code is
+// there" was the only available evidence. scripts/test-model.sh now calls the
+// real function against fixture rollouts. Nothing else about the entry point
+// changes: run directly and the server starts exactly as before.
+if (require.main !== module) {
+  module.exports = { readModelFromTranscript, resolveModel, modelHeaders };
+} else {
+  // Newline-delimited JSON on stdin. Buffer across chunks so a message
+  // split over two reads still parses.
+  let buf = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    buf += chunk;
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let msg;
+      try {
+        msg = JSON.parse(line);
+      } catch (e) {
+        process.stderr.write(
+          "draft-mcp: bad JSON on stdin: " + e.message + "\n",
+        );
+        continue;
+      }
+      handle(msg).catch((e) => {
+        process.stderr.write(
+          "draft-mcp: handler error: " + ((e && e.stack) || e) + "\n",
+        );
+      });
     }
-    handle(msg).catch((e) => {
-      process.stderr.write(
-        "draft-mcp: handler error: " + ((e && e.stack) || e) + "\n",
-      );
-    });
-  }
-});
-// No explicit exit on stdin 'end'. When the client closes stdin the
-// stream unrefs itself; Node then exits on its own once any in-flight
-// tool calls have settled and written their responses. Calling
-// process.exit() here would kill pending fetches mid-flight.
+  });
+  // No explicit exit on stdin 'end'. When the client closes stdin the
+  // stream unrefs itself; Node then exits on its own once any in-flight
+  // tool calls have settled and written their responses. Calling
+  // process.exit() here would kill pending fetches mid-flight.
 
-process.stderr.write(
-  `draft-mcp ${SERVER_INFO.version} ready — API ${API_URL}` +
-    (API_KEY ? "\n" : " (FOUNDRY_API_KEY not set)\n"),
-);
+  process.stderr.write(
+    `draft-mcp ${SERVER_INFO.version} ready — API ${API_URL}` +
+      (API_KEY ? "\n" : " (FOUNDRY_API_KEY not set)\n"),
+  );
+}
