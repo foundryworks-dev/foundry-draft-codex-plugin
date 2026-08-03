@@ -17,3 +17,18 @@ jobs:
       # places. #520 and #534 were both "one ordering was never run", so
       # the orderings are what CI runs.
       - run: ./scripts/test-install.sh
+
+  model-detection:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # #554: the model resolver read Claude Code's field shape out of
+      # Codex's rollouts, so it returned nothing and the header was
+      # silently omitted. Omitting is also the correct behaviour when the
+      # model is genuinely unknown, so nothing distinguished broken from
+      # idle — which is how the same implementation shipped to two hosts
+      # reporting nothing on both. CI runs the resolver now.
+      - run: ./scripts/test-model.sh
