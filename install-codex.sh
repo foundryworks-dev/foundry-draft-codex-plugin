@@ -14,7 +14,8 @@
 #   2. resolve the version (latest, or FOUNDRY_CODEX_VERSION to pin)
 #   3. download + verify the plugin tarball against SHA256SUMS
 #   4. extract to ~/.foundry/codex-draft-plugin/<version> + a `current` symlink
-#   5. wire ~/.codex/config.toml [mcp_servers.draft] inside a marked block
+#   5. wire ~/.codex/config.toml [mcp_servers.foundry] + [mcp_servers.draft]
+#      inside one marked block
 #   6. install the foundry-* skills + the registry broker client
 #
 # Re-running upgrades in place (idempotent, non-destructive). Uninstall with:
@@ -104,20 +105,79 @@ strip_managed_block() {
     rm -f "$tmp"
 }
 
+# Entries for our two keys that sit OUTSIDE the managed block, as "line: text".
+#
+# These are the ones we must never touch and must never duplicate. Our own
+# block is stripped and rewritten on every run, so a key inside it is fine; a
+# key outside it belongs to someone else — a hand-written entry, or one left
+# by a plugin version that wrote `foundry` unmarked. Appending our block on
+# top of one produces a duplicate TOML key, and Codex then refuses to load
+# config.toml at all (#520).
+unmarked_entries() {
+    [ -f "$CONFIG" ] || return 0
+    awk -v b="$BEGIN_MARK" -v e="$END_MARK" '
+        $0 == b { skip = 1; next }
+        $0 == e { skip = 0; next }
+        !skip && /^\[mcp_servers\.(foundry|draft)\]/ { print NR ": " $0 }
+    ' "$CONFIG"
+}
+
+# Refuse rather than rewrite. Telling you exactly what to delete is honest;
+# silently editing a config that may hold your other MCP servers is not — the
+# same rule this installer's uninstall path follows.
+refuse_on_unmarked() {
+    stray="$(unmarked_entries)"
+    [ -n "$stray" ] || return 0
+    printf 'error: %s already has an MCP entry we do not manage:\n' "$CONFIG" >&2
+    printf '%s\n' "$stray" | sed 's/^/  /' >&2
+    cat >&2 <<EOF
+
+  These predate the current installer, which keeps both entries inside the
+  '# BEGIN foundry-draft' markers. Adding ours on top would leave two of the
+  same TOML key, and Codex would refuse to start.
+
+  Delete each block listed above — from its [mcp_servers....] line down to
+  (but not including) the next line starting with '[' — then re-run this
+  installer. Anything inside the markers is ours and can be left alone.
+EOF
+    exit 1
+}
+
+# One block, both keys. The tool namespace a client exposes
+# (mcp__foundry__queue vs mcp__draft__queue) comes from the *config key* —
+# tools/list returns bare names — so offering both prefixes means mounting the
+# same server twice (#457). `foundry` is the name going forward; `draft` stays
+# until the telemetry gate (#458) says nobody calls it.
+#
+# Both live inside one sentinel pair so the block round-trips: strip removes
+# exactly what write added. The previous split — `draft` marked, `foundry`
+# unmarked and written only by the clone installer — meant neither installer
+# could manage the other's entry, which is what left remote installs without
+# a `foundry` key at all (#534).
 write_managed_block() { # write_managed_block <mcp-js-path>
     mkdir -p "$CODEX_HOME"
     touch "$CONFIG"
+    refuse_on_unmarked
     strip_managed_block
     # Ensure a separating blank line if the file has content.
     [ -s "$CONFIG" ] && printf '\n' >> "$CONFIG"
     cat >> "$CONFIG" <<EOF
 $BEGIN_MARK
-[mcp_servers.draft]
+[mcp_servers.foundry]
 command = "node"
-args = ["$1"]
+# --server-key tells the process which namespace it is serving. Both entries
+# run the same script and tools/list returns bare names either way, so without
+# it the two are indistinguishable from the inside — and the legacy-prefix
+# signal #458 needs would be unmeasurable.
+args = ["$1", "--server-key=foundry"]
 # Credentials come from your shell environment, not this file. Both name
 # pairs are listed so an operator on either keeps working — the MCP server
 # prefers FOUNDRY_* and falls back to DRAFT_* (#456).
+env_vars = ["FOUNDRY_API_KEY", "FOUNDRY_API_URL", "DRAFT_API_KEY", "DRAFT_API_URL"]
+
+[mcp_servers.draft]
+command = "node"
+args = ["$1", "--server-key=draft"]
 env_vars = ["FOUNDRY_API_KEY", "FOUNDRY_API_URL", "DRAFT_API_KEY", "DRAFT_API_URL"]
 $END_MARK
 EOF
