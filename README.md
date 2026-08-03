@@ -46,9 +46,11 @@ That's the Codex equivalent of "/plugin install": it fetches a
 versioned, SHA-256-verified plugin tarball from `dl.foundryworks.dev`
 (no `git clone`), installs it to `~/.foundry/codex-draft-plugin/<version>`
 (with a `current` symlink for clean upgrades), and idempotently wires a
-`[mcp_servers.draft]` block into `~/.codex/config.toml` — inside a marked
-`# BEGIN/END foundry-draft` block, so re-running upgrades in place and
-your other config is never touched. Skills and the registry broker
+`[mcp_servers.foundry]` + `[mcp_servers.draft]` block into
+`~/.codex/config.toml` — inside a marked `# BEGIN/END foundry-draft`
+block, so re-running upgrades in place and your other config is never
+touched. Both keys give you the same server under two tool prefixes
+(`foundry` is the one to use; `draft` is the legacy name). Skills and the registry broker
 client go into `~/.codex/skills/` and `~/.codex/scripts/`.
 
 Pin a version with `FOUNDRY_CODEX_VERSION=v0.1.0`, or uninstall with:
@@ -107,11 +109,27 @@ If you'd rather wire it up yourself:
    clone):
 
    ```toml
+   [mcp_servers.foundry]
+   command = "node"
+   args = ["/absolute/path/to/foundry-draft-codex-plugin/mcp/draft-mcp.js", "--server-key=foundry"]
+   env_vars = ["FOUNDRY_API_KEY", "FOUNDRY_API_URL", "DRAFT_API_KEY", "DRAFT_API_URL"]
+
    [mcp_servers.draft]
    command = "node"
-   args = ["/absolute/path/to/foundry-draft-codex-plugin/mcp/draft-mcp.js"]
+   args = ["/absolute/path/to/foundry-draft-codex-plugin/mcp/draft-mcp.js", "--server-key=draft"]
    env_vars = ["FOUNDRY_API_KEY", "FOUNDRY_API_URL", "DRAFT_API_KEY", "DRAFT_API_URL"]
    ```
+
+   Both keys run the same script — the tool prefix a client exposes
+   comes from the config key, not from the server, so two prefixes
+   means two entries. One is enough if you only want `foundry`.
+   `--server-key` tells the process which namespace it is serving.
+
+   A hand-written entry is yours and no installer will touch it — but
+   that also means an installer can't add its own without leaving two of
+   the same TOML key, which Codex refuses to load. So if you later run
+   either installer, it stops and asks you to delete these first. Only
+   what sits inside the `# BEGIN/END foundry-draft` markers is managed.
 
    `env_vars` forwards those variables from your shell environment, so
    the key never has to be written into the config file. (`codex mcp
