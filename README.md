@@ -242,6 +242,25 @@ The `draft` MCP server exposes:
 | `update_story`      | Patch arbitrary story fields (points, labels, …).               |
 | `library_write`     | Create or update a Library wiki page by (project, slug).        |
 
+### Craft apps (EP-19)
+
+When a project has a craft app enabled (Figcraft first), the `context`
+tool's project section carries a **Craft apps** block, and these five
+tools drive it through Draft's gateway. They are app-agnostic, so the next
+ArtCraft app needs no plugin release.
+
+| Tool          | What it does                                                                  |
+| ------------- | ----------------------------------------------------------------------------- |
+| `craft_tools` | The app's tools and argument schemas, after Foundry's policy.                 |
+| `craft_open`  | Open a session on a story: a new document, or an existing one by id.         |
+| `craft_call`  | Run one app tool. The app's result comes back unchanged, images as images.    |
+| `craft_save`  | Save the document as a new version on the story, with an optional label.     |
+| `craft_close` | End the session (does not save).                                              |
+
+Agents never see a runner address or secret: every call goes to Draft,
+which checks the command policy, forwards it, and records it.
+`scripts/test-craft-tools.js` runs these tools against a stub API.
+
 ## Layout
 
 ```
