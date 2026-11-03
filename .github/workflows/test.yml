@@ -44,3 +44,15 @@ jobs:
       # content. Stringifying them would still look like it works, so the
       # content type is asserted, over the real stdio transport.
       - run: node scripts/test-craft-tools.js
+
+  handoff-tokens:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # #660: a handoff (owner PATCH, no transition) must report the handing-
+      # off agent's spend in the same request. Before this only finish did,
+      # so PM and Architect lanes never showed up in a story's cost.
+      - run: node scripts/test-handoff-tokens.js

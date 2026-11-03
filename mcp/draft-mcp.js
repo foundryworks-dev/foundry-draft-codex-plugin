@@ -355,13 +355,33 @@ function snapshotClaim(projectId, number) {
 // the aggregate baseline (`snapshot` key, no `snapshot_typed`). Those
 // fall back to the pre-#155 single-field PATCH.
 async function patchTokensUsedAtFinish(projectId, number) {
+  const body = tokensSinceClaim(projectId, number);
+  if (!body) return;
+  try {
+    await api("PATCH", `/v1/projects/${projectId}/stories/${number}`, body);
+  } catch (e) {
+    process.stderr.write(
+      "draft-mcp: agent_tokens_used PATCH failed: " +
+        ((e && e.message) || e) +
+        "\n",
+    );
+    return; // leave the snapshot in place so a retry could still work
+  }
+  dropClaimSnapshot(projectId, number);
+}
+
+// The spend since claim for one story, as the PATCH fields the API takes, or
+// null when there is nothing to report: the story wasn't claimed through this
+// session, or there is no transcript to read. Shared by finish and by a
+// handoff through update_story (#660), so both report the same numbers.
+function tokensSinceClaim(projectId, number) {
   const session = currentSession();
-  if (!session) return;
+  if (!session) return null;
   const snapshots = loadSnapshots(session.sessionId);
   const entry = snapshots[snapshotKey(projectId, number)];
-  if (!entry) return; // story wasn't claimed through this session
+  if (!entry) return null; // story wasn't claimed through this session
   const snap = readTokenSnapshot(session.path);
-  if (snap == null) return;
+  if (snap == null) return null;
 
   // Build the patch body. Always send the aggregate. Send each typed
   // field only when both the baseline AND the current snapshot have a
@@ -383,19 +403,43 @@ async function patchTokensUsedAtFinish(projectId, number) {
     );
   }
 
-  try {
-    await api("PATCH", `/v1/projects/${projectId}/stories/${number}`, body);
-  } catch (e) {
-    process.stderr.write(
-      "draft-mcp: agent_tokens_used PATCH failed: " +
-        ((e && e.message) || e) +
-        "\n",
-    );
-    return; // leave the snapshot in place so a retry could still work
-  }
+  return body;
+}
+
+function dropClaimSnapshot(projectId, number) {
+  const session = currentSession();
+  if (!session) return;
+  const snapshots = loadSnapshots(session.sessionId);
   delete snapshots[snapshotKey(projectId, number)];
   saveSnapshots(session.sessionId, snapshots);
 }
+
+// #660 — a handoff is an owner PATCH with no transition, so before this the
+// handing-off agent's spend was never reported: only `finish` reported it.
+// patchTouchesOwner is the cheap local check (no API call); handsOwnershipAway
+// is true when the patch moves the owner to anyone but `myId`: another agent,
+// null, or an `unset` of owner_id.
+function patchTouchesOwner(patch) {
+  if (!patch || typeof patch !== "object") return false;
+  if (Array.isArray(patch.unset) && patch.unset.includes("owner_id")) {
+    return true;
+  }
+  return Object.prototype.hasOwnProperty.call(patch, "owner_id");
+}
+function handsOwnershipAway(patch, myId) {
+  if (!patchTouchesOwner(patch)) return false;
+  if (Array.isArray(patch.unset) && patch.unset.includes("owner_id")) {
+    return true;
+  }
+  return patch.owner_id !== myId;
+}
+const TOKEN_FIELDS = [
+  "agent_tokens_used",
+  "agent_input_tokens",
+  "agent_output_tokens",
+  "agent_cache_read_tokens",
+  "agent_cache_creation_tokens",
+];
 
 // ---------------------------------------------------------------- HTTP
 
@@ -798,7 +842,7 @@ const TOOLS = [
   {
     name: "update_story",
     description:
-      "Patch fields on a story (points, labels, ready_for_agent, etc.). For claiming ownership prefer claim_story, which resolves your user id for you.",
+      "Patch fields on a story (points, labels, ready_for_agent, etc.). For claiming ownership prefer claim_story, which resolves your user id for you. A patch that hands the story to someone else (owner_id set to another user, or null) also reports your token spend since claim, the way finish does.",
     inputSchema: {
       type: "object",
       properties: {
@@ -811,12 +855,44 @@ const TOOLS = [
       },
       required: ["project_id", "number", "patch"],
     },
-    run: (a) =>
-      api(
-        "PATCH",
-        `/v1/projects/${a.project_id}/stories/${a.number}`,
-        a.patch,
-      ),
+    run: async (a) => {
+      const storyPath = `/v1/projects/${a.project_id}/stories/${a.number}`;
+      // #660 — handing a story to someone else ends this agent's part of
+      // it, so report the spend since claim the way finish does. The token
+      // fields ride in the SAME PATCH as the owner change: the server files
+      // them under the caller's own row (#540), not the owner's, and one
+      // request means a refused handoff records nothing either. A caller
+      // who set token fields explicitly is left alone.
+      const explicitTokens =
+        a.patch &&
+        typeof a.patch === "object" &&
+        TOKEN_FIELDS.some((k) =>
+          Object.prototype.hasOwnProperty.call(a.patch, k),
+        );
+      const tokens =
+        patchTouchesOwner(a.patch) && !explicitTokens
+          ? tokensSinceClaim(a.project_id, a.number)
+          : null;
+      if (tokens) {
+        let myId = null;
+        try {
+          const me = await api("GET", "/v1/auth/me");
+          myId = me && me.user && me.user.id;
+        } catch {
+          // Can't tell a handoff from a self-assignment; send the patch
+          // as given rather than guess.
+        }
+        if (myId && handsOwnershipAway(a.patch, myId)) {
+          const result = await api("PATCH", storyPath, {
+            ...tokens,
+            ...a.patch,
+          });
+          dropClaimSnapshot(a.project_id, a.number);
+          return result;
+        }
+      }
+      return api("PATCH", storyPath, a.patch);
+    },
   },
 
   // ---- Craft apps (EP-19, #666) ----------------------------------------
