@@ -26,7 +26,8 @@ copied into this repo; it may be extracted to a shared package later.)
 
 > **Token-tracking note.** The MCP server's `claim_story` and
 > `transition_story` tools auto-PATCH a story's `agent_tokens_used`
-> field on the finish transition by reading the agent session's
+> field on the finish transition (and `update_story` does on a handoff
+> that moves `owner_id` to someone else, #660) by reading the agent session's
 > transcript file. Today that reader only knows the Claude Code
 > transcript path (`~/.claude/projects/…`), so in a Codex session
 > the bookkeeping gracefully short-circuits and leaves the field
